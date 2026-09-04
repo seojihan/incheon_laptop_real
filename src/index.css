@@ -1,0 +1,87 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", "Noto Sans KR", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  
+  --color-slate-50: #FFFFFF;
+  --color-slate-100: #F9F9F9;
+  --color-slate-200: #EEEEEE;
+  --color-slate-500: #888888;
+  --color-slate-800: #111111;
+  --color-slate-900: #000000;
+  --color-brand-blue: #000000;
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-white text-black antialiased font-sans;
+    min-width: 320px;
+    min-height: 100vh;
+  }
+
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2;
+  }
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+
+.card-geometric {
+  @apply bg-white border border-slate-200 rounded-lg shadow-sm;
+}
+
+.status-pill {
+  @apply px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider;
+}
+
+.status-pill-out {
+  @apply bg-red-100 text-red-800;
+}
+
+.status-pill-in {
+  @apply bg-emerald-100 text-emerald-800;
+}
+
+.status-pill-pending {
+  @apply bg-amber-100 text-amber-800;
+}
+
+/* Keep scroll areas discoverable without using the browser's bulky default. */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  @apply bg-slate-100;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-500/40 rounded-full;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

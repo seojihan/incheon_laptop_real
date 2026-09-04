@@ -1,0 +1,6 @@
+{
+  "liveServer.settings.root": "/dist",
+  "liveServer.settings.port": 5501,
+  "liveServer.settings.wait": 700,
+  "liveServer.settings.NoBrowser": false
+}

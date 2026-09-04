@@ -1,0 +1,1 @@
+-- Intentionally empty. The initial migration creates the 33 managed notebooks.
