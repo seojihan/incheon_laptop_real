@@ -22,3 +22,6 @@ supabase/.temp/
 output/
 __pycache__/
 *.pyc
+
+.vercel
+.env*
