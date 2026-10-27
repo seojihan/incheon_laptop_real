@@ -1,7 +1,13 @@
 {
-  "short_name": "ICJS Laptop",
+  "short_name": "중산고 노트북",
   "name": "인천중산고 노트북 관리 시스템",
   "icons": [
+    {
+      "src": "images/school-logo.png",
+      "sizes": "200x200",
+      "type": "image/png",
+      "purpose": "any"
+    },
     {
       "src": "icon.svg",
       "sizes": "any",
@@ -11,6 +17,6 @@
   ],
   "start_url": "./",
   "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#000000"
+  "theme_color": "#293d31",
+  "background_color": "#faf7f0"
 }

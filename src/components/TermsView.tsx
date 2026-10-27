@@ -32,7 +32,7 @@ export default function TermsView({ onBack }: TermsViewProps) {
             <ArrowLeft className="h-4 w-4" /> 이전 화면
           </button>
         )}
-        <button type="button" onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-xl bg-black px-4 py-3 text-sm font-black text-white hover:bg-zinc-800">
+        <button type="button" onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-black text-white hover:bg-slate-800">
           <Printer className="h-4 w-4" /> 인쇄·PDF 저장
         </button>
       </div>

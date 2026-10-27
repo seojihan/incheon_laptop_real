@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" fill="none">
+  <defs>
+    <linearGradient id="desk" x1="94" y1="578" x2="708" y2="710" gradientUnits="userSpaceOnUse"><stop stop-color="#D5B58B"/><stop offset="1" stop-color="#B78F65"/></linearGradient>
+    <linearGradient id="metal" x1="170" y1="534" x2="630" y2="612" gradientUnits="userSpaceOnUse"><stop stop-color="#F5F3EF"/><stop offset="1" stop-color="#C9C8C3"/></linearGradient>
+    <filter id="shadow" x="74" y="530" width="660" height="198" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feGaussianBlur stdDeviation="19"/></filter>
+  </defs>
+  <path fill="#F8F6F1" d="M0 0h800v800H0z"/>
+  <circle cx="653" cy="161" r="126" fill="#EFE7D8"/>
+  <path d="M0 546c141-42 249-32 350 5 107 39 210 38 299 7 59-21 108-27 151-17v259H0V546Z" fill="#F0ECE4"/>
+  <path d="M89 207c0-18 14-32 32-32h159c18 0 32 14 32 32v304H89V207Z" fill="#E6E1D7"/>
+  <rect x="104" y="191" width="191" height="309" rx="15" fill="#FFFEFC"/>
+  <rect x="120" y="207" width="159" height="277" rx="9" fill="#F6F3ED"/>
+  <rect x="120" y="207" width="159" height="48" rx="9" fill="#E8E1D4"/>
+  <circle cx="140" cy="231" r="7" fill="#D5A95F"/><path d="M156 228h78" stroke="#847760" stroke-linecap="round" stroke-width="5"/>
+  <text x="132" y="281" fill="#5F594E" font-family="Arial,sans-serif" font-size="12" font-weight="700">이번 주 시간표</text>
+  <g fill="#fff" stroke="#E4DED3"><rect x="120.5" y="293.5" width="158" height="43" rx="8"/><rect x="120.5" y="343.5" width="158" height="43" rx="8"/><rect x="120.5" y="393.5" width="158" height="43" rx="8"/></g>
+  <g fill="#A79880" font-family="Arial,sans-serif" font-size="9"><text x="132" y="311">월요일 · 2교시</text><text x="132" y="361">수요일 · 4교시</text><text x="132" y="411">금요일 · 1교시</text></g>
+  <g fill="#6F8B75"><rect x="218" y="301" width="48" height="24" rx="12"/><rect x="218" y="351" width="48" height="24" rx="12"/><rect x="218" y="401" width="48" height="24" rx="12"/></g>
+  <g fill="#fff" font-family="Arial,sans-serif" font-size="8" font-weight="700"><text x="228" y="316">신청 완료</text><text x="228" y="366">수업용</text><text x="228" y="416">신청 완료</text></g>
+  <ellipse cx="412" cy="616" rx="284" ry="46" fill="#514333" fill-opacity=".17" filter="url(#shadow)"/>
+  <path d="M72 576h656v137H72z" fill="url(#desk)"/>
+  <path d="M72 576h656v17H72z" fill="#E3CAA8"/>
+  <g transform="translate(-140 -140) scale(1.35)">
+  <rect x="225" y="276" width="362" height="270" rx="23" fill="#27313A"/>
+  <rect x="240" y="291" width="332" height="240" rx="12" fill="#FFFEFC"/>
+  <path d="M252 303h308v34H252z" fill="#F8F6F1"/>
+  <circle cx="270" cy="320" r="8" fill="#D29C3E"/><path d="M286 319h69" stroke="#393B3B" stroke-linecap="round" stroke-width="5"/><path d="M514 319h23" stroke="#9C9589" stroke-linecap="round" stroke-width="4"/>
+  <rect x="252" y="337" width="69" height="194" fill="#F4F1EA"/>
+  <rect x="264" y="356" width="43" height="9" rx="4.5" fill="#D7CDBB"/><rect x="264" y="379" width="34" height="7" rx="3.5" fill="#E4DED3"/><rect x="264" y="400" width="41" height="7" rx="3.5" fill="#E4DED3"/><rect x="264" y="421" width="37" height="7" rx="3.5" fill="#E4DED3"/>
+  <text x="337" y="365" fill="#3C3C3A" font-family="Arial,sans-serif" font-size="13" font-weight="700">교과 대여 신청</text>
+  <text x="337" y="384" fill="#9B958B" font-family="Arial,sans-serif" font-size="8">요일과 교시를 선택해 주세요</text>
+  <rect x="337" y="397" width="211" height="35" rx="8" fill="#F8F6F1"/><rect x="348" y="408" width="61" height="12" rx="6" fill="#E6DED0"/><rect x="492" y="405" width="45" height="17" rx="8.5" fill="#E7C987"/>
+  <rect x="337" y="440" width="211" height="35" rx="8" fill="#F8F6F1"/><rect x="348" y="451" width="77" height="12" rx="6" fill="#E6DED0"/><rect x="492" y="448" width="45" height="17" rx="8.5" fill="#E7C987"/>
+  <rect x="337" y="484" width="211" height="28" rx="8" fill="#263F36"/><text x="404" y="502" fill="#fff" font-family="Arial,sans-serif" font-size="9" font-weight="700">신청하기</text>
+  <path d="M190 548h432l49 38H142l48-38Z" fill="url(#metal)"/><path d="M260 555h294l24 20H236l24-20Z" fill="#D4D2CC"/><path d="M372 560h72" stroke="#A8A7A1" stroke-linecap="round" stroke-width="4"/>
+  </g>
+  <rect x="648" y="476" width="57" height="92" rx="9" fill="#C4A77E"/><path d="M642 477c1-16 14-29 31-29s30 13 31 29h-62Z" fill="#6D8870"/><path d="M671 456c-19-19-16-42 4-56 18 21 17 39-2 57m5 4c7-22 23-30 42-23-7 21-22 30-42 26" fill="#839C80"/>
+</svg>

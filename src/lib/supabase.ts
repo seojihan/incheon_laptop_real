@@ -25,6 +25,9 @@ export const supabase = createClient<Database>(
       persistSession: true,
       detectSessionInUrl: true,
       autoRefreshToken: true,
+      // Exchange a short-lived authorization code on return instead of
+      // validating an access token copied into the URL fragment.
+      flowType: 'pkce',
       storageKey: 'icjs-laptop-auth',
     },
   }

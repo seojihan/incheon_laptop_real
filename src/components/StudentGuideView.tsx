@@ -6,7 +6,7 @@ interface StudentGuideViewProps {
 
 const statusItems = [
   ['승인 대기', '신청이 접수되어 담당자가 확인하기 전입니다. 이 상태에서는 본인이 취소할 수 있습니다.'],
-  ['대여 중', '담당자가 승인하고 노트북 번호를 배정했습니다. 알림의 번호와 실물을 확인하세요.'],
+  ['승인 완료', '담당자가 승인하고 노트북 번호를 배정했습니다. 실제 수령 전 담당자와 장비 번호를 대조하세요.'],
   ['반려', '신청 조건이 맞지 않아 승인되지 않았습니다. 반려 사유를 확인하고 수정해 새로 신청하세요.'],
   ['신청 취소', '승인 전에 본인이 취소한 신청입니다. 장비는 배정되지 않습니다.'],
   ['반납 완료', '담당자가 실물 회수를 확인하고 시스템 처리를 마친 상태입니다.'],
@@ -27,7 +27,7 @@ export default function StudentGuideView({ onBack }: StudentGuideViewProps) {
         <button type="button" onClick={onBack} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-black hover:bg-slate-50">
           <ArrowLeft className="h-4 w-4" /> 이용 안내로 돌아가기
         </button>
-        <button type="button" onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-xl bg-black px-4 py-3 text-sm font-black text-white hover:bg-zinc-800">
+        <button type="button" onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-black text-white hover:bg-slate-800">
           <Printer className="h-4 w-4" /> 인쇄·PDF 저장
         </button>
       </div>
@@ -45,9 +45,9 @@ export default function StudentGuideView({ onBack }: StudentGuideViewProps) {
         <section className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm sm:p-8">
           <h2 className="flex items-center gap-3 text-xl font-black"><CalendarDays className="h-6 w-6 text-blue-600" />교과 대여 신청</h2>
           <ol className="mt-5 space-y-3 text-sm leading-7 text-slate-700">
-            <li><strong>1.</strong> 왼쪽 메뉴에서 <strong>교과 대여</strong>를 선택합니다.</li>
-            <li><strong>2.</strong> 수업이 있는 연도, 월과 주차를 확인합니다.</li>
-            <li><strong>3.</strong> 월요일부터 금요일까지 필요한 교시 칸을 선택합니다.</li>
+            <li><strong>1.</strong> 위쪽 메뉴 또는 <strong>전체 메뉴</strong>에서 교과 대여를 선택합니다.</li>
+            <li><strong>2.</strong> 실제 날짜가 표시된 연도, 월과 수업 주간을 확인합니다. 지난 날짜는 선택할 수 없습니다.</li>
+            <li><strong>3.</strong> 필요한 요일과 교시를 선택하고 신청 요약에서 날짜를 확인합니다.</li>
             <li><strong>4.</strong> 잘못 선택한 교시는 다시 눌러 해제합니다.</li>
             <li><strong>5.</strong> 신청 내용을 확인한 후 통합 신청을 제출합니다.</li>
           </ol>
@@ -57,11 +57,11 @@ export default function StudentGuideView({ onBack }: StudentGuideViewProps) {
         <section className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm sm:p-8">
           <h2 className="flex items-center gap-3 text-xl font-black"><Laptop className="h-6 w-6 text-blue-600" />가정 대여 신청</h2>
           <ol className="mt-5 space-y-3 text-sm leading-7 text-slate-700">
-            <li><strong>1.</strong> 왼쪽 메뉴에서 <strong>가정에 대여</strong>를 선택합니다.</li>
-            <li><strong>2.</strong> 시작일과 반납 예정일을 선택합니다. 한 번에 최대 30일까지 신청할 수 있습니다.</li>
+            <li><strong>1.</strong> 위쪽 메뉴 또는 <strong>전체 메뉴</strong>에서 가정 대여를 선택합니다.</li>
+            <li><strong>2.</strong> 시작일과 반납 예정일을 선택합니다. 화면에 표시되는 대여 일수는 시작일과 반납일을 포함하며, 최대 30일까지 신청할 수 있습니다.</li>
             <li><strong>3.</strong> 특이사항이 꼭 필요할 때만 500자 이내로 적습니다.</li>
-            <li><strong>4.</strong> 대여 수칙과 기간을 다시 확인하고 신청을 제출합니다.</li>
-            <li><strong>5.</strong> 기존 가정 대여가 대기 또는 승인 상태이면 먼저 해당 신청을 처리해야 합니다.</li>
+            <li><strong>4.</strong> 확인 창에서 기간, 일수와 신청자 정보를 다시 확인한 뒤 접수합니다.</li>
+            <li><strong>5.</strong> 한 건의 가정 대여만 진행할 수 있습니다. 기존 신청이 대기 또는 승인 상태이면 신청 내역에서 상태를 확인합니다.</li>
           </ol>
           <p className="mt-5 rounded-2xl bg-amber-50 p-4 text-sm leading-7 text-amber-900"><strong>개인정보 주의:</strong> 신청 사유에는 전화번호, 집 주소, 건강정보나 자세한 가정 사정을 적지 않습니다.</p>
         </section>
@@ -79,13 +79,13 @@ export default function StudentGuideView({ onBack }: StudentGuideViewProps) {
         </div>
       </section>
 
-      <section className="mt-8 rounded-3xl bg-slate-950 p-7 text-white sm:p-9">
-        <h2 className="flex items-center gap-3 text-xl font-black"><Bell className="h-6 w-6 text-cyan-300" />승인 이후 수령과 사용</h2>
-        <ol className="mt-6 grid gap-4 text-sm leading-7 text-slate-200 md:grid-cols-2">
-          <li className="rounded-2xl border border-white/10 p-5"><strong className="block text-white">1. 배정 번호 확인</strong>알림과 대여 기록에 표시된 노트북 번호를 확인합니다.</li>
-          <li className="rounded-2xl border border-white/10 p-5"><strong className="block text-white">2. 실물 대조</strong>담당자와 함께 화면 번호와 노트북 자산 태그가 같은지 확인합니다.</li>
-          <li className="rounded-2xl border border-white/10 p-5"><strong className="block text-white">3. 이상 상태 보고</strong>화면 파손, 충전기 누락, 전원 문제는 사용하기 전에 담당자에게 알립니다.</li>
-          <li className="rounded-2xl border border-white/10 p-5"><strong className="block text-white">4. 승인 범위 준수</strong>승인된 목적, 기간과 장소에서만 사용하고 다른 사람에게 빌려주지 않습니다.</li>
+      <section className="mt-8 rounded-3xl border border-slate-200 bg-white p-7 shadow-sm sm:p-9">
+        <h2 className="flex items-center gap-3 text-xl font-black text-slate-900"><Bell className="h-6 w-6 text-blue-700" />승인 이후 수령과 사용</h2>
+        <ol className="mt-6 grid gap-4 text-sm leading-7 text-slate-700 md:grid-cols-2">
+          <li className="rounded-2xl border border-slate-200 bg-slate-50 p-5"><strong className="block text-slate-900">1. 배정 번호 확인</strong>알림과 대여 기록에 표시된 노트북 번호를 확인합니다.</li>
+          <li className="rounded-2xl border border-slate-200 bg-slate-50 p-5"><strong className="block text-slate-900">2. 실물 대조</strong>담당자와 함께 화면 번호와 노트북 자산 태그가 같은지 확인합니다.</li>
+          <li className="rounded-2xl border border-slate-200 bg-slate-50 p-5"><strong className="block text-slate-900">3. 이상 상태 보고</strong>화면 파손, 충전기 누락, 전원 문제는 사용하기 전에 담당자에게 알립니다.</li>
+          <li className="rounded-2xl border border-slate-200 bg-slate-50 p-5"><strong className="block text-slate-900">4. 승인 범위 준수</strong>승인된 목적, 기간과 장소에서만 사용하고 다른 사람에게 빌려주지 않습니다.</li>
         </ol>
       </section>
 

@@ -124,13 +124,13 @@ export default function InfoView({ currentUser, onOpenStudentGuide, onOpenTerms 
         <p className="text-slate-500 mt-3 leading-7">현재 로그인한 역할에 필요한 기능과 처리 기준을 안내합니다.</p>
       </header>
 
-      <section className="rounded-3xl bg-slate-950 p-7 text-white sm:p-9">
+      <section className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm sm:p-9">
         <div className="flex items-start gap-4">
-          <ShieldCheck className="mt-1 h-7 w-7 shrink-0 text-cyan-300" />
+          <ShieldCheck className="mt-1 h-7 w-7 shrink-0 text-blue-700" />
           <div>
-            <h2 className="text-xl font-black">내 역할: {roleLabel[currentUser.role]}</h2>
-            <p className="mt-2 text-sm leading-7 text-slate-300">{guide.scope}</p>
-            <p className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm leading-7 text-slate-200">{guide.example}</p>
+            <h2 className="text-xl font-black text-slate-900">내 역할: {roleLabel[currentUser.role]}</h2>
+            <p className="mt-2 text-sm leading-7 text-slate-600">{guide.scope}</p>
+            <p className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-7 text-slate-700">{guide.example}</p>
           </div>
         </div>
       </section>
@@ -152,7 +152,7 @@ export default function InfoView({ currentUser, onOpenStudentGuide, onOpenTerms 
         <ol className="mt-6 grid gap-3 text-sm leading-7 text-slate-700 md:grid-cols-2">
           {guide.checklist.map((item, index) => (
             <li key={item} className="flex gap-3 rounded-2xl bg-slate-50 p-4">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-black text-[11px] font-black text-white">{index + 1}</span>
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-900 text-[11px] font-black text-white">{index + 1}</span>
               <span>{item}</span>
             </li>
           ))}
@@ -166,7 +166,7 @@ export default function InfoView({ currentUser, onOpenStudentGuide, onOpenTerms 
           <button type="button" onClick={onOpenStudentGuide} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-black hover:bg-slate-50">
             <FileText className="h-4 w-4" /> 학생용 빠른 설명서
           </button>
-          <a href={operationsGuideUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl bg-black px-4 py-3 text-sm font-black text-white hover:bg-zinc-800">
+          <a href={operationsGuideUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-black text-white hover:bg-slate-800">
             <BookOpenCheck className="h-4 w-4" /> 전체 운영·사용자 매뉴얼(DOCX) <ExternalLink className="h-3 w-3" />
           </a>
           <button type="button" onClick={onOpenTerms} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-black hover:bg-slate-50">

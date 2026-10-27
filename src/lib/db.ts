@@ -4,10 +4,12 @@ import {
   LaptopRequest,
   NotebookInventoryItem,
   RentalSlot,
+  RequestType,
   RequestStatus,
   User,
 } from '../types';
-import { getRequestErrorMessage, normalizeClassNum, validateHomeRental, validateSlots } from './validation';
+import { getRequestErrorMessage, normalizeClassNum, validateClassRentalSelection, validateHomeRental } from './validation';
+import { getRequestSlotDate, hasCalendarWeekLabel } from './rentalSchedule';
 import { isDemoSession } from './auth';
 import type { Database, Json } from './database.types';
 import { supabase } from './supabase';
@@ -19,6 +21,7 @@ interface LaptopRequestRow {
   user_id: string;
   user_name: string;
   student_id: string;
+  grade?: string;
   class_num: string;
   type: 'home' | 'class';
   status: RequestStatus;
@@ -35,6 +38,7 @@ interface LaptopRequestRow {
   reviewed_at?: string | null;
   created_at: string;
   updated_at?: string;
+  archived_at?: string | null;
 }
 
 interface NotificationRow {
@@ -49,8 +53,19 @@ interface NotificationRow {
 
 const DEMO_REQUESTS_STORAGE_KEY = 'icjs-demo-laptop-requests';
 const DEMO_NOTIFICATIONS_STORAGE_KEY = 'icjs-demo-notifications';
+const DEMO_NOTEBOOKS_STORAGE_KEY = 'icjs-demo-notebook-inventory';
 const TOTAL_NOTEBOOKS = 33;
 const signalNotificationsChanged = () => window.dispatchEvent(new Event('icjs:notifications-changed'));
+const missingGradeColumn = (error: { code?: string; message?: string } | null) => Boolean(error && (
+  error.code === '42703' || error.code === 'PGRST204'
+) && (error.message || '').toLowerCase().includes('grade'));
+
+const insertRequestWithSchemaFallback = async (record: Record<string, unknown>) => {
+  const { data, error } = await (supabase as any).from('laptop_requests').insert(record).select().single();
+  if (!missingGradeColumn(error)) return { data, error };
+  const { grade: _grade, ...legacyRecord } = record;
+  return await (supabase as any).from('laptop_requests').insert(legacyRecord).select().single();
+};
 
 const readStorage = <T>(key: string, fallback: T): T => {
   try {
@@ -80,12 +95,12 @@ const mapRowToRequest = (row: LaptopRequestRow): LaptopRequest => ({
   userName: row.user_name,
   studentId: row.student_id,
   classNum: normalizeClassNum(row.class_num),
+  grade: row.grade || row.student_id.slice(0, 1),
   type: row.type,
   status: row.status,
   startDate: row.start_date,
   endDate: row.end_date || undefined,
   slots: row.slots || undefined,
-  period: row.slots?.map((slot) => slot.periodIdx + 1),
   reason: row.reason || undefined,
   weekLabel: row.week_label || undefined,
   rentalYear: row.rental_year || undefined,
@@ -145,12 +160,6 @@ const ensureStudentId = (studentId?: string) => {
   }
 };
 
-const localDate = (year: number, month: number, day: number) => {
-  const date = new Date(year, month - 1, day);
-  const offset = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 10);
-};
-
 const addDemoNotification = (request: LaptopRequestRow, title: string, message: string) => {
   const notifications = readDemoNotifications();
   notifications.unshift({
@@ -192,6 +201,7 @@ export const createHomeRequest = async (params: {
       user_id: params.userId,
       user_name: params.userName.trim(),
       student_id: params.studentId!,
+      grade: params.studentId!.slice(0, 1),
       class_num: deriveClassNum(params.studentId!),
       type: 'home',
       status: 'pending',
@@ -207,24 +217,36 @@ export const createHomeRequest = async (params: {
     return mapRowToRequest(row);
   }
 
-  const { data, error } = await supabase
-    .from('laptop_requests')
-    .insert({
+  const { data, error } = await insertRequestWithSchemaFallback({
       user_id: params.userId,
       user_name: params.userName.trim(),
       student_id: params.studentId,
+      grade: params.studentId!.slice(0, 1),
       class_num: deriveClassNum(params.studentId!),
       type: 'home',
       start_date: params.startDate,
       end_date: params.endDate,
       reason: params.reason.trim() || '가정용 노트북 대여 신청',
-    })
-    .select()
-    .single();
+    });
 
   if (error) throwFriendly(error, '가정 대여 신청을 저장하지 못했습니다.');
   signalNotificationsChanged();
   return mapRowToRequest(fromDatabaseRow(data));
+};
+
+const hasOverlappingClassRequest = (
+  requests: LaptopRequest[],
+  params: { year: number; month: number; week: number; weekStartDate: string; slots: RentalSlot[] },
+) => {
+  const requestedDates = new Set(params.slots.map((slot) => getRequestSlotDate(params.weekStartDate, slot.dayIdx, true)));
+  return requests.some((request) => {
+    if (request.type !== 'class' || !['pending', 'approved'].includes(request.status)) return false;
+    if (request.rentalYear === params.year && request.rentalMonth === params.month && request.rentalWeek === params.week) return true;
+    return (request.slots ?? []).some((slot) => {
+      const existingDate = getRequestSlotDate(request.startDate, slot.dayIdx, hasCalendarWeekLabel(request.weekLabel));
+      return requestedDates.has(existingDate);
+    });
+  });
 };
 
 export const createClassRequest = async (params: {
@@ -234,6 +256,7 @@ export const createClassRequest = async (params: {
   year: number;
   month: number;
   week: number;
+  weekStartDate: string;
   weekLabel: string;
   slots: RentalSlot[];
   reason: string;
@@ -245,20 +268,19 @@ export const createClassRequest = async (params: {
   if (params.month < 1 || params.month > 12 || params.week < 1 || params.week > 5) {
     throw new Error('신청 월 또는 주차가 올바르지 않습니다.');
   }
-  const slotError = validateSlots(params.slots);
+  const slotError = validateClassRentalSelection({
+    year: params.year,
+    month: params.month,
+    week: params.week,
+    weekStartDate: params.weekStartDate,
+    slots: params.slots,
+  });
   if (slotError) throw new Error(slotError);
 
   if (isDemoSession()) {
     const requests = readDemoRequests();
-    const duplicate = requests.some((item) =>
-      item.user_id === params.userId &&
-      item.type === 'class' &&
-      item.rental_year === params.year &&
-      item.rental_month === params.month &&
-      item.rental_week === params.week &&
-      ['pending', 'approved'].includes(item.status),
-    );
-    if (duplicate) throw new Error('같은 주차에 처리 중인 교과 대여 신청이 이미 있습니다.');
+    const userRequests = requests.filter((item) => item.user_id === params.userId).map(mapRowToRequest);
+    if (hasOverlappingClassRequest(userRequests, params)) throw new Error('선택한 날짜에 처리 중인 교과 대여 신청이 이미 있습니다. 기존 신청 내역을 확인해주세요.');
 
     const now = new Date().toISOString();
     const row: LaptopRequestRow = {
@@ -266,10 +288,11 @@ export const createClassRequest = async (params: {
       user_id: params.userId,
       user_name: params.userName.trim(),
       student_id: params.studentId!,
+      grade: params.studentId!.slice(0, 1),
       class_num: deriveClassNum(params.studentId!),
       type: 'class',
       status: 'pending',
-      start_date: localDate(params.year, params.month, 1 + (params.week - 1) * 7),
+      start_date: params.weekStartDate,
       slots: params.slots.map(({ dayIdx, periodIdx }) => ({ dayIdx, periodIdx })),
       reason: params.reason.trim() || '교과 대여 신청',
       week_label: params.weekLabel,
@@ -285,24 +308,24 @@ export const createClassRequest = async (params: {
     return mapRowToRequest(row);
   }
 
-  const { data, error } = await supabase
-    .from('laptop_requests')
-    .insert({
+  const userRequests = await getUserRequests(params.userId);
+  if (hasOverlappingClassRequest(userRequests, params)) throw new Error('선택한 날짜에 처리 중인 교과 대여 신청이 이미 있습니다. 기존 신청 내역을 확인해주세요.');
+
+  const { data, error } = await insertRequestWithSchemaFallback({
       user_id: params.userId,
       user_name: params.userName.trim(),
       student_id: params.studentId,
+      grade: params.studentId!.slice(0, 1),
       class_num: deriveClassNum(params.studentId!),
       type: 'class',
-      start_date: localDate(params.year, params.month, 1 + (params.week - 1) * 7),
+      start_date: params.weekStartDate,
       slots: params.slots.map(({ dayIdx, periodIdx }) => ({ dayIdx, periodIdx })),
       reason: params.reason.trim() || '교과 대여 신청',
       week_label: params.weekLabel,
       rental_year: params.year,
       rental_month: params.month,
       rental_week: params.week,
-    })
-    .select()
-    .single();
+    });
 
   if (error) throwFriendly(error, '교과 대여 신청을 저장하지 못했습니다.');
   signalNotificationsChanged();
@@ -328,17 +351,23 @@ export const getRecords = async (user: User) => {
     const all = readDemoRequests();
     if (user.role === 'admin') return all.map(mapRowToRequest);
     if (user.role === 'teacher' || user.role === 'helper') {
+      const grade = user.grade;
       const classNum = normalizeClassNum(user.classNum);
-      return all.filter((item) => normalizeClassNum(item.class_num) === classNum).map(mapRowToRequest);
+      return all.filter((item) => item.grade === grade && normalizeClassNum(item.class_num) === classNum).map(mapRowToRequest);
     }
     return all.filter((item) => item.user_id === user.id).map(mapRowToRequest);
   }
 
   let query = supabase.from('laptop_requests').select('*').order('created_at', { ascending: false }).limit(300);
   if (user.role === 'student') query = query.eq('user_id', user.id);
-  else if (user.role !== 'admin' && user.classNum) query = query.eq('class_num', normalizeClassNum(user.classNum));
+  else if (user.role !== 'admin' && user.classNum && user.grade) query = query.eq('grade', user.grade).eq('class_num', normalizeClassNum(user.classNum));
+  else if (user.role !== 'admin') query = query.eq('id', '00000000-0000-0000-0000-000000000000');
 
-  const { data, error } = await query;
+  let { data, error } = await query;
+  if (user.role !== 'admin' && missingGradeColumn(error) && user.classNum) {
+    const legacyQuery = supabase.from('laptop_requests').select('*').eq('class_num', normalizeClassNum(user.classNum)).order('created_at', { ascending: false }).limit(300);
+    ({ data, error } = await legacyQuery);
+  }
   if (error) throwFriendly(error, '대여 기록을 불러오지 못했습니다.');
   return data.map(fromDatabaseRow).map(mapRowToRequest);
 };
@@ -429,36 +458,93 @@ export const returnLaptopRequest = async (requestId: string) => {
 
 export const getNotebookInventory = async (): Promise<NotebookInventoryItem[]> => {
   if (isDemoSession()) {
-    const active = readDemoRequests().filter((item) => item.status === 'approved' && item.notebook_number);
+    const requests = readDemoRequests();
+    const active = requests.filter((item) => item.status === 'approved' && item.notebook_number);
+    const overrides = readStorage<Record<string, { condition: NotebookInventoryItem['condition']; note?: string }>>(DEMO_NOTEBOOKS_STORAGE_KEY, {});
     return Array.from({ length: TOTAL_NOTEBOOKS }, (_, index) => {
       const number = index + 1;
       const request = active.find((item) => item.notebook_number === number);
+      const homeRentalCount = requests.filter((item) =>
+        item.notebook_number === number && item.type === 'home' && ['approved', 'returned'].includes(item.status),
+      ).length;
+      const override = overrides[String(number)];
       return {
         number,
         assetTag: `ICJS-NB-${String(number).padStart(2, '0')}`,
-        condition: 'available',
+        condition: override?.condition || 'available',
+        homeRentalCount,
+        activeRentalType: request?.type,
+        activeRentalStartDate: request?.start_date,
+        activeRentalEndDate: request?.end_date || undefined,
+        note: override?.note || undefined,
         activeRequest: request ? mapRowToRequest(request) : undefined,
       };
     });
   }
 
-  const [{ data: notebooks, error: notebookError }, { data: requests, error: requestError }] = await Promise.all([
+  const [
+    { data: notebooks, error: notebookError },
+    { data: requests, error: requestError },
+    { data: summary, error: summaryError },
+  ] = await Promise.all([
     supabase.from('notebooks').select('*').order('number', { ascending: true }),
     supabase.from('laptop_requests').select('*').eq('status', 'approved').not('notebook_number', 'is', null),
+    supabase.rpc('get_notebook_inventory_summary'),
   ]);
   if (notebookError) throwFriendly(notebookError, '노트북 목록을 불러오지 못했습니다.');
   if (requestError) throwFriendly(requestError, '현재 대여 상태를 불러오지 못했습니다.');
+  if (summaryError) throwFriendly(summaryError, '장비별 대여 이력을 불러오지 못했습니다.');
 
   const requestByNotebook = new Map<number, LaptopRequest>(
     requests.map(fromDatabaseRow).map((row) => [Number(row.notebook_number), mapRowToRequest(row)]),
   );
+  const summaryByNotebook = new Map(summary.map((item) => [item.notebook_number, item]));
   return (notebooks as Array<{ number: number; asset_tag: string; condition: NotebookInventoryItem['condition']; note?: string | null }>).map((item) => ({
     number: item.number,
     assetTag: item.asset_tag,
     condition: item.condition,
+    homeRentalCount: Number(summaryByNotebook.get(item.number)?.home_rental_count || 0),
+    activeRentalType: (summaryByNotebook.get(item.number)?.active_request_type || undefined) as RequestType | undefined,
+    activeRentalStartDate: summaryByNotebook.get(item.number)?.active_start_date || undefined,
+    activeRentalEndDate: summaryByNotebook.get(item.number)?.active_end_date || undefined,
     note: item.note || undefined,
     activeRequest: requestByNotebook.get(item.number),
   }));
+};
+
+export const updateNotebookCondition = async (
+  number: number,
+  condition: NotebookInventoryItem['condition'],
+  note: string,
+) => {
+  const cleanNote = note.trim();
+  if (!Number.isInteger(number) || number < 1 || number > TOTAL_NOTEBOOKS) {
+    throw new Error('노트북 번호를 확인해주세요.');
+  }
+  if (!['available', 'maintenance', 'retired'].includes(condition)) {
+    throw new Error('선택한 장비 상태가 올바르지 않습니다.');
+  }
+  if (cleanNote.length > 500) throw new Error('메모는 500자 이내로 입력해주세요.');
+
+  if (isDemoSession()) {
+    const activeRental = readDemoRequests().some((item) => item.status === 'approved' && item.notebook_number === number);
+    const overrides = readStorage<Record<string, { condition: NotebookInventoryItem['condition']; note?: string }>>(DEMO_NOTEBOOKS_STORAGE_KEY, {});
+    const currentCondition = overrides[String(number)]?.condition || 'available';
+    if (activeRental && condition !== currentCondition) {
+      throw new Error('대여 중인 장비의 상태는 반납 처리한 뒤 변경할 수 있습니다. 메모는 지금 수정할 수 있습니다.');
+    }
+    overrides[String(number)] = { condition, note: cleanNote || undefined };
+    writeStorage(DEMO_NOTEBOOKS_STORAGE_KEY, overrides);
+    return;
+  }
+
+  const { error } = await supabase
+    .from('notebooks')
+    .update({ condition, note: cleanNote || null })
+    .eq('number', number)
+    .select('number')
+    .single();
+  if (error) throwFriendly(error, '장비 상태를 저장하지 못했습니다. 담당자 권한과 연결 상태를 확인해주세요.');
 };
 
 export const getNotifications = async (userId: string) => {

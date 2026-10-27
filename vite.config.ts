@@ -5,7 +5,8 @@ import { defineConfig, loadEnv } from 'vite';
 
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
-  const serverPort = Number(env.VITE_PORT) || 3000;
+  // 3000 is often taken by other local projects; OAuth redirect URLs are registered for 3100.
+  const serverPort = Number(env.VITE_PORT) || 3100;
 
   return {
     base: './',

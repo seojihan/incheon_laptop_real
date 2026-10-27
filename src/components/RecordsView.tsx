@@ -3,14 +3,19 @@ import { ChevronDown, History, Monitor, RefreshCw, Search } from 'lucide-react';
 import { cancelLaptopRequest, getRecords, returnLaptopRequest } from '../lib/db';
 import { cn } from '../lib/utils';
 import { LaptopRequest, RequestStatus, User } from '../types';
+import { formatRequestSlot, hasCalendarWeekLabel } from '../lib/rentalSchedule';
 
-interface RecordsViewProps { currentUser: User }
+interface RecordsViewProps {
+  currentUser: User;
+  initialRequestId?: string | null;
+  onRequestTargetHandled?: () => void;
+}
 
 const statusLabel: Record<RequestStatus, string> = {
-  pending: '승인 대기', approved: '대여 중', rejected: '반려', returned: '반납 완료', cancelled: '신청 취소',
+  pending: '승인 대기', approved: '승인 완료', rejected: '반려', returned: '반납 완료', cancelled: '신청 취소',
 };
 
-export default function RecordsView({ currentUser }: RecordsViewProps) {
+export default function RecordsView({ currentUser, initialRequestId, onRequestTargetHandled }: RecordsViewProps) {
   const [records, setRecords] = useState<LaptopRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -28,6 +33,18 @@ export default function RecordsView({ currentUser }: RecordsViewProps) {
   };
 
   useEffect(() => { void load(); }, [currentUser.id, currentUser.role, currentUser.classNum]);
+
+  useEffect(() => {
+    if (loading || !initialRequestId) return;
+    if (error) {
+      onRequestTargetHandled?.();
+      return;
+    }
+    const target = records.find((record) => record.id === initialRequestId);
+    if (target) setExpandedId(target.id);
+    else setError('연결된 신청 내역을 찾지 못했습니다. 목록을 새로고침해 주세요.');
+    onRequestTargetHandled?.();
+  }, [initialRequestId, loading, records, error, onRequestTargetHandled]);
 
   const filtered = useMemo(() => {
     const query = search.trim().toLocaleLowerCase('ko-KR');
@@ -99,7 +116,7 @@ export default function RecordsView({ currentUser }: RecordsViewProps) {
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2 mb-2"><span className="text-xs font-bold text-slate-400">{new Date(record.createdAt).toLocaleDateString('ko-KR')}</span><StatusBadge status={record.status} />{record.notebookNumber && <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-black text-blue-700">노트북 {record.notebookNumber}번</span>}</div>
                     <h2 className="text-lg font-black text-slate-900 truncate">{record.userName} — {record.type === 'home' ? '가정 대여' : record.weekLabel || '교과 대여'}</h2>
-                    <p className="text-sm text-slate-500 mt-1">{record.type === 'home' ? `${record.startDate} ~ ${record.endDate}` : `${record.slots?.length ?? 0}개 교시 선택`}</p>
+                    <p className="text-sm text-slate-500 mt-1">{record.type === 'home' ? `${record.startDate} ~ ${record.endDate}` : `${record.weekLabel || '교과 대여'} · ${record.slots?.length ?? 0}개 교시 선택`}</p>
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2 lg:justify-end">
@@ -114,7 +131,7 @@ export default function RecordsView({ currentUser }: RecordsViewProps) {
                   <Detail label="관리 번호" value={record.id} />
                   <Detail label="신청 사유" value={record.reason || '등록된 사유 없음'} />
                   <Detail label="검토 내용" value={record.reviewNote || '등록된 검토 메모 없음'} />
-                  {record.slots && record.slots.length > 0 && <div className="md:col-span-2"><p className="text-[10px] uppercase text-slate-400 tracking-widest mb-2">선택 교시</p><div className="flex flex-wrap gap-2">{record.slots.map((slot, index) => <span key={`${slot.dayIdx}-${slot.periodIdx}-${index}`} className="rounded-full bg-white border border-slate-200 px-3 py-2 text-xs font-bold">{['월', '화', '수', '목', '금'][slot.dayIdx]} {slot.periodIdx + 1}교시</span>)}</div></div>}
+                  {record.slots && record.slots.length > 0 && <div className="md:col-span-2"><p className="text-[10px] uppercase text-slate-400 tracking-widest mb-2">{hasCalendarWeekLabel(record.weekLabel) ? '선택 날짜와 교시' : '선택 요일과 교시'}</p>{!hasCalendarWeekLabel(record.weekLabel) && <p className="mb-2 text-xs text-slate-500">이전 신청 형식이라 정확한 날짜는 저장되어 있지 않습니다.</p>}<div className="flex flex-wrap gap-2">{record.slots.map((slot, index) => <span key={`${slot.dayIdx}-${slot.periodIdx}-${index}`} className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-bold">{formatRequestSlot(slot, record.startDate, record.weekLabel)}</span>)}</div></div>}
                 </div>
               )}
             </article>

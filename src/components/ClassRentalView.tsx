@@ -1,13 +1,27 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { User, RequestStatus } from '../types';
 import { Clock, Check, Calendar, Trash2, ChevronDown, Bell, Save, Copy, Layout, CalendarDays } from 'lucide-react';
 import { createClassRequest, getUserRequests } from '../lib/db';
-import { getCurrentWeekOfMonth, validateSlots } from '../lib/validation';
+import { todayLocalIso, validateClassRentalSelection } from '../lib/validation';
+import {
+  ClassRentalWeek,
+  formatRequestSlot,
+  formatShortSchoolDate,
+  getClassRentalWeeks,
+  getDefaultClassRentalWeek,
+  getFirstAvailableDay,
+  getRequestSlotDate,
+  hasCalendarWeekLabel,
+  PERIODS,
+  WEEKDAYS,
+} from '../lib/rentalSchedule';
 
 interface ClassRentalViewProps {
   currentUser: User;
+  onOpenRecords: (requestId?: string) => void;
+  onOpenSettings: () => void;
 }
 
 interface SelectedSlot {
@@ -21,34 +35,28 @@ interface WeeklyApplication {
   month: number;
   week: number;
   weekLabel: string;
+  startDate: string;
   slots: SelectedSlot[];
   status: RequestStatus;
   appliedAt: string;
 }
 
-const PERIODS = [
-  { label: '등교 전', time: '08:00 - 08:40' },
-  { label: '1교시', time: '08:40 - 09:30' },
-  { label: '2교시', time: '09:40 - 10:30' },
-  { label: '3교시', time: '10:40 - 11:30' },
-  { label: '4교시', time: '11:40 - 12:30' },
-  { label: '점심시간', time: '12:30 - 13:30' },
-  { label: '5교시', time: '13:30 - 14:20' },
-  { label: '6교시', time: '14:30 - 15:20' },
-  { label: '7교시', time: '15:30 - 16:20' },
-];
-
-const DAYS = ['월요일', '화요일', '수요일', '목요일', '금요일'];
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
-const WEEKS_IN_MONTH = [1, 2, 3, 4, 5];
 
-export default function ClassRentalView({ currentUser }: ClassRentalViewProps) {
-  const [selectedDayIdx, setSelectedDayIdx] = useState<number>(0);
-  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
-  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1);
-  const [selectedWeek, setSelectedWeek] = useState<number>(getCurrentWeekOfMonth());
+export default function ClassRentalView({ currentUser, onOpenRecords, onOpenSettings }: ClassRentalViewProps) {
+  const initialToday = todayLocalIso();
+  const initialYear = Number(initialToday.slice(0, 4));
+  const initialMonth = Number(initialToday.slice(5, 7));
+  const initialWeeks = getClassRentalWeeks(initialYear, initialMonth, initialToday);
+  const initialWeek = getDefaultClassRentalWeek(initialWeeks);
+  const initialWeekData = initialWeeks.find((week) => week.week === initialWeek);
+  const [selectedDayIdx, setSelectedDayIdx] = useState<number>(getFirstAvailableDay(initialWeekData, initialToday));
+  const [selectedYear, setSelectedYear] = useState<number>(initialYear);
+  const [selectedMonth, setSelectedMonth] = useState<number>(initialMonth);
+  const [selectedWeek, setSelectedWeek] = useState<number>(initialWeek);
   const [basket, setBasket] = useState<SelectedSlot[]>([]);
   const [templates, setTemplates] = useState<{ name: string; slots: SelectedSlot[] }[]>([]);
+  const [showTemplates, setShowTemplates] = useState(false);
   const [submissions, setSubmissions] = useState<WeeklyApplication[]>([]);
   const [viewDetail, setViewDetail] = useState<WeeklyApplication | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -56,7 +64,24 @@ export default function ClassRentalView({ currentUser }: ClassRentalViewProps) {
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [scheduleNotice, setScheduleNotice] = useState<string | null>(null);
   const hasStudentId = Boolean(currentUser.studentId);
+  const todayIso = todayLocalIso();
+  const weeks = useMemo(() => getClassRentalWeeks(selectedYear, selectedMonth, todayIso), [selectedYear, selectedMonth, todayIso]);
+  const selectedWeekData = weeks.find((week) => week.week === selectedWeek) ?? weeks[0];
+  const selectedDayDate = selectedWeekData?.datesByDay[selectedDayIdx] ?? null;
+  const dayIsAvailable = Boolean(selectedDayDate && selectedDayDate >= todayIso);
+  const currentWeekRequest = submissions.find((item) => {
+    if (!['pending', 'approved'].includes(item.status)) return false;
+    if (item.year === selectedYear && item.month === selectedMonth && item.week === selectedWeek) return true;
+    return item.slots.some((slot) => {
+      const selectedDate = selectedWeekData?.datesByDay[slot.dayIdx];
+      if (!selectedDate) return false;
+      const existingDate = getRequestSlotDate(item.startDate, slot.dayIdx, hasCalendarWeekLabel(item.weekLabel));
+      return selectedDate === existingDate;
+    });
+  });
+  const currentWeekHasRequest = Boolean(currentWeekRequest);
 
   useEffect(() => {
     try {
@@ -79,10 +104,11 @@ export default function ClassRentalView({ currentUser }: ClassRentalViewProps) {
           .filter((item) => item.type === 'class')
           .map((item) => ({
             id: item.id,
-            year: item.rentalYear || new Date(item.startDate).getFullYear(),
-            month: item.rentalMonth || 0,
+            year: item.rentalYear || Number(item.startDate.slice(0, 4)),
+            month: item.rentalMonth || Number(item.startDate.slice(5, 7)),
             week: item.rentalWeek || 0,
             weekLabel: item.weekLabel || '교과 대여',
+            startDate: item.startDate,
             slots: item.slots || [],
             status: item.status,
             appliedAt: item.createdAt.split('T')[0],
@@ -97,6 +123,54 @@ export default function ClassRentalView({ currentUser }: ClassRentalViewProps) {
     };
     loadUserRequests();
   }, [currentUser.id]);
+
+  const changePeriod = (year: number, month: number) => {
+    const nextWeeks = getClassRentalWeeks(year, month, todayLocalIso());
+    const nextWeekNumber = getDefaultClassRentalWeek(nextWeeks);
+    const nextWeek = nextWeeks.find((week) => week.week === nextWeekNumber);
+    const nextToday = todayLocalIso();
+    const nextDayIdx = getFirstAvailableDay(nextWeek, nextToday);
+    const retained = basket.filter((slot) => {
+      const date = nextWeek?.datesByDay[slot.dayIdx];
+      return Boolean(date && date >= nextToday && PERIODS[slot.periodIdx]);
+    });
+    if (retained.length !== basket.length) {
+      setScheduleNotice(`${basket.length - retained.length}개 선택은 새 기간에 없는 날짜라 제외했어요.`);
+    } else if (basket.length > 0) {
+      setScheduleNotice('선택한 교시는 유지했어요. 새 날짜에 맞는지 아래 요약에서 확인해 주세요.');
+    } else {
+      setScheduleNotice(null);
+    }
+    setSelectedYear(year);
+    setSelectedMonth(month);
+    setSelectedWeek(nextWeekNumber);
+    setSelectedDayIdx(nextDayIdx);
+    setBasket(retained);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+  };
+
+  const changeWeek = (week: ClassRentalWeek) => {
+    if (!week.available) return;
+    const nextToday = todayLocalIso();
+    const nextDayIdx = getFirstAvailableDay(week, nextToday);
+    const retained = basket.filter((slot) => {
+      const date = week.datesByDay[slot.dayIdx];
+      return Boolean(date && date >= nextToday && PERIODS[slot.periodIdx]);
+    });
+    if (retained.length !== basket.length) {
+      setScheduleNotice(`${basket.length - retained.length}개 선택은 새 주간에 없는 날짜라 제외했어요.`);
+    } else if (basket.length > 0) {
+      setScheduleNotice('선택한 교시는 유지했어요. 새 날짜에 맞는지 아래 요약에서 확인해 주세요.');
+    } else {
+      setScheduleNotice(null);
+    }
+    setSelectedWeek(week.week);
+    setSelectedDayIdx(nextDayIdx);
+    setBasket(retained);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+  };
 
   const handlePeriodClick = (pIdx: number) => {
     const found = basket.some((slot) => slot.dayIdx === selectedDayIdx && slot.periodIdx === pIdx);
@@ -132,7 +206,17 @@ export default function ClassRentalView({ currentUser }: ClassRentalViewProps) {
 
   const loadTemplate = (templateSlots: SelectedSlot[]) => {
     if (confirm('현재 작업을 지우고 템플릿을 불러올까요?')) {
-      setBasket([...templateSlots]);
+      const allowedSlots = templateSlots.filter((slot) => {
+        const date = selectedWeekData?.datesByDay[slot.dayIdx];
+        return Boolean(date && date >= todayLocalIso() && PERIODS[slot.periodIdx]);
+      });
+      if (allowedSlots.length !== templateSlots.length) {
+        setScheduleNotice(`${templateSlots.length - allowedSlots.length}개 선택은 이 주간에 없는 날짜라 제외했어요.`);
+      } else {
+        setScheduleNotice('저장한 구성을 불러왔어요. 날짜와 교시를 확인해 주세요.');
+      }
+      setBasket(allowedSlots);
+      setShowTemplates(false);
     }
   };
 
@@ -142,7 +226,18 @@ export default function ClassRentalView({ currentUser }: ClassRentalViewProps) {
       return;
     }
 
-    const slotError = validateSlots(basket);
+    if (!selectedWeekData) {
+      setErrorMessage('신청할 수 있는 날짜가 있는 주간을 선택해주세요.');
+      return;
+    }
+
+    const slotError = validateClassRentalSelection({
+      year: selectedYear,
+      month: selectedMonth,
+      week: selectedWeek,
+      weekStartDate: selectedWeekData.mondayDate,
+      slots: basket,
+    });
     if (slotError) {
       setErrorMessage(slotError);
       return;
@@ -158,7 +253,7 @@ export default function ClassRentalView({ currentUser }: ClassRentalViewProps) {
     setErrorMessage(null);
 
     try {
-      const weekLabel = `${selectedYear}년 ${selectedMonth}월 ${selectedWeek}주차`;
+    const weekLabel = `${selectedYear}년 ${selectedMonth}월 ${selectedWeek}주차 · ${selectedWeekData.dateLabel}`;
       const created = await createClassRequest({
         userId: currentUser.id,
         userName: currentUser.name,
@@ -166,6 +261,7 @@ export default function ClassRentalView({ currentUser }: ClassRentalViewProps) {
         year: selectedYear,
         month: selectedMonth,
         week: selectedWeek,
+        weekStartDate: selectedWeekData.mondayDate,
         weekLabel,
         slots: basket,
         reason: '교과 대여 신청',
@@ -178,6 +274,7 @@ export default function ClassRentalView({ currentUser }: ClassRentalViewProps) {
           month: selectedMonth,
           week: selectedWeek,
           weekLabel,
+          startDate: selectedWeekData.mondayDate,
           slots: [...basket],
           status: 'pending',
           appliedAt: new Date().toISOString().split('T')[0],
@@ -186,7 +283,8 @@ export default function ClassRentalView({ currentUser }: ClassRentalViewProps) {
       ]);
       setBasket([]);
       setShowConfirmModal(false);
-      setSuccessMessage(`${selectedYear}년 ${selectedMonth}월 ${selectedWeek}주차 신청이 제출되었습니다.`);
+      setScheduleNotice(null);
+      setSuccessMessage(`${weekLabel} 교과 대여 신청을 접수했어요. 담당자 승인 후 장비가 배정됩니다.`);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : '제출 중 오류가 발생했습니다.');
     } finally {
@@ -195,350 +293,140 @@ export default function ClassRentalView({ currentUser }: ClassRentalViewProps) {
   };
 
   return (
-    <div className="max-w-6xl mx-auto pb-32">
-      <div className="flex flex-col md:flex-row md:items-end justify-between mb-10 gap-6">
-        <div>
-          <h1 className="text-4xl font-black tracking-tight text-slate-900 mb-3">주간 교과 대여 시스템</h1>
-          <p className="text-slate-500 text-base font-medium">인천중산고 학생들을 위한 주간 시간표 신청 도구입니다.</p>
-        </div>
+    <div className="mx-auto max-w-6xl pb-16">
+      <header className="mb-6">
+        <span className="mb-3 inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-black text-blue-800"><CalendarDays className="h-4 w-4" />교과 대여</span>
+        <h1 className="text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">주간 교과 대여</h1>
+        <p className="mt-2 text-sm leading-6 text-slate-600 sm:text-base">실제 날짜가 표시된 수업 주간을 고르고 필요한 교시를 신청하세요.</p>
+      </header>
 
-        <div className="flex flex-wrap gap-3 max-w-full">
-          <label className="bg-white border border-slate-200 rounded-xl px-3 flex items-center gap-2 shadow-sm text-[10px] font-black text-slate-400 uppercase">
-            Year
-            <select value={selectedYear} onChange={(event) => setSelectedYear(Number(event.target.value))} className="h-10 bg-transparent text-sm font-black text-slate-800 outline-none">
-              {[new Date().getFullYear(), new Date().getFullYear() + 1].map((year) => <option key={year} value={year}>{year}</option>)}
-            </select>
-          </label>
-          <div className="max-w-full overflow-x-auto bg-white border border-slate-200 rounded-xl p-2 flex items-center gap-1 shadow-sm">
-            <span className="px-3 text-[10px] font-black text-slate-400 uppercase">Month</span>
-            <div className="flex gap-1">
-              {MONTHS.map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setSelectedMonth(m)}
-                  className={cn(
-                    'w-8 h-8 rounded-lg text-xs font-bold transition-all',
-                    selectedMonth === m ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-700',
-                  )}
-                >
-                  {m}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="bg-white border border-slate-200 rounded-xl p-2 flex items-center gap-1 shadow-sm">
-            <span className="px-3 text-[10px] font-black text-slate-400 uppercase">Week</span>
-            <div className="flex gap-1">
-              {WEEKS_IN_MONTH.map((w) => (
-                <button
-                  key={w}
-                  onClick={() => setSelectedWeek(w)}
-                  className={cn(
-                    'w-8 h-8 rounded-lg text-xs font-bold transition-all',
-                    selectedWeek === w ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-700',
-                  )}
-                >
-                  {w}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex flex-col md:flex-row justify-between items-center bg-slate-100 p-2 rounded-2xl border border-slate-200 mb-8 gap-4">
-        <div className="flex gap-1.5 overflow-x-auto w-full md:w-auto">
-          {DAYS.map((day, i) => (
-            <button
-              key={i}
-              onClick={() => setSelectedDayIdx(i)}
-              className={cn(
-                'px-10 py-3 text-sm font-black rounded-xl transition-all relative whitespace-nowrap',
-                selectedDayIdx === i
-                  ? 'bg-white text-slate-900 shadow-xl ring-1 ring-slate-200'
-                  : 'text-slate-400 hover:bg-white/50 hover:text-slate-600',
-              )}
-            >
-              {day}
-              {basket.some((s) => s.dayIdx === i) && (
-                <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-blue-600 rounded-full border-2 border-white" />
-              )}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex gap-2 w-full md:w-auto px-2">
-          <button
-            onClick={saveAsTemplate}
-            className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl text-xs font-black hover:bg-blue-700 transition-all shadow-md"
-          >
-            <Save className="w-4 h-4" /> 템플릿 저장
-          </button>
-          <div className="relative group flex-1 md:flex-none">
-            <button className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs font-black hover:bg-slate-50 transition-all shadow-sm">
-              <Layout className="w-4 h-4" /> 불러오기
-            </button>
-            <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-slate-200 rounded-xl shadow-2xl opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-all z-50 p-2 overflow-hidden">
-              <p className="text-[10px] font-black text-slate-400 px-3 py-2 uppercase">My Templates</p>
-              {templates.length === 0 && <p className="text-[10px] text-slate-300 px-3 py-4 italic">저장된 템플릿 없음</p>}
-              {templates.map((t, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => loadTemplate(t.slots)}
-                  className="w-full text-left px-3 py-3 text-xs font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-all flex items-center justify-between group/item"
-                >
-                  {t.name}
-                  <Copy className="w-3 h-3 opacity-0 group-hover/item:opacity-100" />
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {successMessage && <div role="status" className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-bold text-emerald-700">{successMessage}</div>}
-
-      <div className="relative bg-white border-2 border-slate-100 rounded-[32px] shadow-2xl overflow-x-auto mb-12">
-        <div className="min-w-[900px]">
-        <div className="grid grid-cols-9 border-b border-slate-100 bg-slate-50/30">
-          {PERIODS.map((period, i) => (
-            <div key={i} className="py-6 text-center border-r border-slate-100 last:border-0 px-2">
-              <p className={cn(
-                'text-[10px] font-black uppercase tracking-[0.1em] mb-1.5',
-                period.label === '등교 전' || period.label === '점심시간' ? 'text-blue-600' : 'text-slate-400',
-              )}
-              >
-                {period.label}
-              </p>
-              <p className="text-[10px] text-slate-400 font-mono font-bold">{period.time}</p>
-            </div>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-9 h-80">
-          {PERIODS.map((_, pIdx) => {
-            const isMine = isSlotSelected(selectedDayIdx, pIdx);
-
-            return (
-              <button
-                type="button"
-                key={pIdx}
-                onClick={() => handlePeriodClick(pIdx)}
-                aria-pressed={isMine}
-                aria-label={`${DAYS[selectedDayIdx]} ${PERIODS[pIdx].label} ${isMine ? '선택 해제' : '선택'}`}
-                className={cn(
-                  'relative flex flex-col items-center justify-center gap-4 py-8 border-r border-slate-100 last:border-0 transition-all cursor-pointer group',
-                  isMine ? 'bg-blue-600/[0.04]' : 'hover:bg-slate-50/50',
-                )}
-              >
-                <div className="flex flex-col items-center gap-3">
-                  <div className={cn(
-                    'w-16 h-16 rounded-3xl border-2 transition-all duration-500 flex items-center justify-center shadow-sm',
-                    isMine ? 'bg-blue-600 border-blue-600 shadow-[0_15px_30px_rgba(37,99,235,0.3)] scale-110' : 'bg-white border-slate-100 group-hover:border-slate-300',
-                  )}>
-                    {isMine ? (
-                      <Check className="w-8 h-8 text-white stroke-[4]" />
-                    ) : (
-                      <div className="w-3 h-3 rounded-full bg-slate-100 group-hover:bg-slate-300 transition-colors" />
-                    )}
-                  </div>
-                  <span className={cn(
-                    'text-[10px] font-black uppercase tracking-widest transition-colors',
-                    isMine ? 'text-blue-600' : 'text-slate-300 group-hover:text-slate-500',
-                  )}
-                  >
-                    {isMine ? '신청됨' : '대여 가능'}
-                  </span>
+      <section aria-label="대여 주차 선택" className="mb-5 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-center">
+          <div className="min-w-0">
+            <p className="mb-2 text-xs font-black text-slate-500">대여할 달</p>
+            <div className="flex items-center gap-2">
+              <label className="shrink-0 rounded-xl border border-slate-200 bg-[#fbfaf7] px-3 text-xs font-bold text-slate-600">
+                연도
+                <select aria-label="대여 연도" value={selectedYear} onChange={(event) => changePeriod(Number(event.target.value), selectedMonth)} className="ml-2 h-10 bg-transparent text-sm font-black text-slate-800">
+                  {[Number(todayIso.slice(0, 4)), Number(todayIso.slice(0, 4)) + 1].map((year) => <option key={year} value={year}>{year}년</option>)}
+                </select>
+              </label>
+              <div className="min-w-0 flex-1 overflow-x-auto rounded-xl border border-slate-200 bg-[#fbfaf7] p-1.5">
+                <div className="flex min-w-max gap-1" role="group" aria-label="대여 월">
+                  {MONTHS.map((month) => {
+                    const monthIsPast = selectedYear === Number(todayIso.slice(0, 4)) && month < Number(todayIso.slice(5, 7));
+                    return <button type="button" key={month} onClick={() => changePeriod(selectedYear, month)} disabled={monthIsPast} aria-pressed={selectedMonth === month} className={cn('h-9 min-w-9 rounded-lg px-2 text-xs font-bold transition disabled:cursor-not-allowed disabled:text-slate-300', selectedMonth === month ? 'bg-blue-700 text-white shadow-sm disabled:bg-slate-300 disabled:text-white' : 'text-slate-600 hover:bg-white disabled:hover:bg-transparent')}>
+                      {month}월
+                    </button>;
+                  })}
                 </div>
-              </button>
-            );
-          })}
-        </div>
-        </div>
-      </div>
-
-      <div className="grid lg:grid-cols-3 gap-10">
-        <div className="lg:col-span-2 space-y-10">
-          <div className="bg-white border border-slate-200 rounded-3xl p-10 shadow-xl">
-            <div className="flex items-center justify-between mb-10">
-              <h3 className="text-2xl font-black text-slate-900 flex items-center gap-3">
-                <CalendarDays className="w-8 h-8 text-blue-600" />
-                {selectedMonth}월 {selectedWeek}주차 신청 상세
-              </h3>
+              </div>
             </div>
+          </div>
+          <div>
+            <p className="mb-2 text-xs font-black text-slate-500">수업 주간</p>
+            <div className="flex max-w-full flex-wrap gap-1.5 rounded-xl border border-slate-200 bg-[#fbfaf7] p-1.5" role="group" aria-label="대여 주차">
+              {weeks.map((week) => <button type="button" key={week.week} onClick={() => changeWeek(week)} disabled={!week.available} aria-pressed={selectedWeek === week.week} aria-label={`${week.week}주차, ${week.dateLabel}${week.available ? '' : ', 신청 마감'}`} className={cn('flex min-h-12 min-w-20 flex-col items-center justify-center rounded-lg px-2 py-1 text-xs font-bold leading-4 transition disabled:cursor-not-allowed disabled:text-slate-300', selectedWeek === week.week ? 'bg-blue-700 text-white shadow-sm disabled:bg-slate-300 disabled:text-white' : 'text-slate-600 hover:bg-white disabled:bg-slate-100')}><span>{week.week}주</span><span className={cn('text-[9px] font-semibold', selectedWeek === week.week ? 'text-blue-100' : 'text-slate-500')}>{week.dateLabel.replace(/[()]/g, '')}</span></button>)}
+            </div>
+          </div>
+          <div className="rounded-xl bg-blue-50 px-4 py-3 text-center md:min-w-40">
+            <p className="text-sm font-black text-blue-900">{selectedMonth}월 {selectedWeek}주차</p>
+            <p className="mt-1 text-xs font-bold text-blue-800">{selectedWeekData?.dateLabel ?? '신청 가능한 날짜 없음'}</p>
+          </div>
+        </div>
+        <p className="mt-3 text-xs leading-5 text-slate-500">표시된 날짜가 실제 신청 날짜예요. 지난 날짜는 선택할 수 없고, 학교 행사·휴업일은 학교 일정표에서 확인해 주세요.</p>
+      </section>
 
-            <div className="space-y-4">
-              {DAYS.map((day, dIdx) => {
-                const daySlots = basket.filter((s) => s.dayIdx === dIdx).sort((a, b) => a.periodIdx - b.periodIdx);
-                if (daySlots.length === 0) return null;
+      <section className="mb-5 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5" aria-label="요일과 시간 선택">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex gap-1 overflow-x-auto rounded-2xl bg-[#f7f5ef] p-1.5" role="group" aria-label="대여 요일">
+            {WEEKDAYS.map((day, index) => {
+              const date = selectedWeekData?.datesByDay[index] ?? null;
+              const selectable = Boolean(date && date >= todayIso && !currentWeekHasRequest);
+              return <button type="button" key={day.short} onClick={() => setSelectedDayIdx(index)} disabled={!selectable} aria-pressed={selectedDayIdx === index} aria-label={`${day.full} ${date ? formatShortSchoolDate(date) : '해당 주간에 없음'}${selectable ? '' : ', 선택 불가'}`} className={cn('relative min-h-10 shrink-0 rounded-xl px-3 text-sm font-bold transition sm:px-4 disabled:cursor-not-allowed disabled:text-slate-300', selectedDayIdx === index ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-200 disabled:bg-slate-200 disabled:text-slate-500' : 'text-slate-600 hover:bg-white/70 disabled:hover:bg-transparent')}>
+                <span className="block">{day.short}</span><span className="mt-0.5 block text-[10px] font-semibold">{date ? `${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}` : '—'}</span>
+                {basket.some((slot) => slot.dayIdx === index) && <span aria-label="선택한 교시 있음" className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-blue-700" />}
+              </button>
+            })}
+          </div>
+          <div className="flex gap-2">
+            <button type="button" onClick={saveAsTemplate} className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 text-xs font-black text-white transition hover:bg-blue-800 sm:flex-none"><Save className="h-4 w-4" />구성 저장</button>
+            <button type="button" onClick={() => setShowTemplates((open) => !open)} aria-expanded={showTemplates} className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-black text-slate-700 transition hover:bg-slate-50 sm:flex-none"><Layout className="h-4 w-4" />저장한 구성</button>
+          </div>
+        </div>
+        {showTemplates && <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 p-3" aria-label="저장한 시간표 구성">
+          <p className="mb-2 px-1 text-xs font-black text-slate-500">내 시간표 구성</p>
+          {templates.length === 0 ? <p className="px-1 py-3 text-sm text-slate-500">저장한 구성이 없습니다.</p> : <div className="flex flex-wrap gap-2">{templates.map((template, index) => <button type="button" key={`${template.name}-${index}`} onClick={() => loadTemplate(template.slots)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 hover:border-blue-300 hover:text-blue-800">{template.name}<Copy className="h-3.5 w-3.5" /></button>)}</div>}
+        </div>}
+        <p className="mb-3 text-sm font-black text-slate-800">{WEEKDAYS[selectedDayIdx].full} {selectedDayDate ? formatShortSchoolDate(selectedDayDate) : ''} · 필요한 교시를 선택하세요</p>
+        {successMessage && <div role="status" className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800">{successMessage}</div>}
+        {errorMessage && <div role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold leading-5 text-red-700">{errorMessage}</div>}
+        {scheduleNotice && <div role="status" className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-bold leading-5 text-blue-800">{scheduleNotice}</div>}
+        {currentWeekHasRequest && <div role="status" className="mb-4 flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-5 text-amber-900 sm:flex-row sm:items-center sm:justify-between"><span>이 기간과 겹치는 진행 중 신청이 있어요. 기존 신청 내용을 확인해 주세요.</span><button type="button" onClick={() => onOpenRecords(currentWeekRequest?.id)} className="shrink-0 font-black underline underline-offset-4">신청 내역 보기</button></div>}
 
-                return (
-                  <div key={dIdx} className="bg-slate-50/50 border border-slate-200 rounded-[24px] p-6 flex items-center justify-between group">
-                    <div className="flex items-center gap-8">
-                      <div className="w-20 h-12 bg-white border border-slate-200 rounded-xl flex items-center justify-center text-sm font-black text-blue-700 shadow-sm">
-                        {day}
-                      </div>
-                      <div className="flex flex-wrap gap-2.5">
-                        {daySlots.map((slot) => (
-                          <span key={slot.periodIdx} className="px-5 py-2.5 bg-slate-900 text-white text-[11px] font-black rounded-xl shadow-lg ring-1 ring-white/10">
-                            {PERIODS[slot.periodIdx].label}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setBasket((prev) => prev.filter((s) => s.dayIdx !== dIdx))}
-                      aria-label={`${day} 선택 모두 지우기`}
-                      className="p-3 text-slate-400 hover:text-red-500 hover:bg-white rounded-xl transition-all shadow-sm sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100"
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </button>
-                  </div>
-                );
+        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
+          <div className="grid min-w-0 grid-cols-2 gap-2.5 sm:grid-cols-3">
+            {PERIODS.map((period, periodIdx) => {
+              const selected = isSlotSelected(selectedDayIdx, periodIdx);
+              return <button type="button" key={period.label} onClick={() => handlePeriodClick(periodIdx)} disabled={!dayIsAvailable || currentWeekHasRequest} aria-pressed={selected} aria-label={`${WEEKDAYS[selectedDayIdx].full} ${selectedDayDate ? formatShortSchoolDate(selectedDayDate) : ''} ${period.label} ${selected ? '선택 해제' : '선택'}`} className={cn('min-h-24 rounded-2xl border p-3 text-left transition sm:min-h-28 sm:p-4 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:opacity-60', selected ? 'border-blue-500 bg-blue-50 shadow-sm ring-2 ring-blue-100' : 'border-slate-200 bg-white hover:border-blue-200 hover:bg-slate-50')}>
+                <div className="mb-3 flex items-center justify-between gap-2"><span className={cn('text-sm font-black', selected ? 'text-blue-900' : 'text-slate-800')}>{period.label}</span><span className={cn('flex h-6 w-6 items-center justify-center rounded-full border', selected ? 'border-blue-700 bg-blue-700 text-white' : 'border-slate-300 bg-white text-transparent')}><Check className="h-3.5 w-3.5" /></span></div>
+                <p className="font-mono text-xs font-bold text-slate-500">{period.time}</p>
+                <p className={cn('mt-2 text-[11px] font-bold', selected ? 'text-blue-800' : 'text-slate-400')}>{selected ? '선택됨' : '눌러서 선택'}</p>
+              </button>;
+            })}
+          </div>
+
+          <aside className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:sticky lg:top-24 sm:p-5">
+            <div className="mb-4 flex items-start justify-between gap-3"><div><h2 className="font-black text-slate-900">신청 구성</h2><p className="mt-1 text-xs text-slate-500">{selectedMonth}월 {selectedWeek}주차</p></div><span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-black text-blue-800">{basket.length}개 교시</span></div>
+            <div className="mb-4 max-h-64 space-y-3 overflow-y-auto">
+              {WEEKDAYS.map((day, dayIdx) => {
+                const daySlots = basket.filter((slot) => slot.dayIdx === dayIdx).sort((a, b) => a.periodIdx - b.periodIdx);
+                if (!daySlots.length) return null;
+                const date = selectedWeekData?.datesByDay[dayIdx];
+                return <div key={day.short} className="rounded-xl border border-slate-200 bg-[#fbfaf7] p-3"><div className="mb-2 flex items-center justify-between"><p className="text-xs font-black text-slate-700">{day.full}{date ? ` · ${formatShortSchoolDate(date)}` : ''}</p><button type="button" onClick={() => setBasket((prev) => prev.filter((slot) => slot.dayIdx !== dayIdx))} aria-label={`${day.full} 선택 모두 지우기`} className="rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button></div><div className="flex flex-wrap gap-1.5">{daySlots.map((slot) => <span key={slot.periodIdx} className="rounded-lg bg-white px-2 py-1 text-[11px] font-bold text-slate-700">{PERIODS[slot.periodIdx].label}</span>)}</div></div>;
               })}
-
-              {basket.length === 0 && (
-                <div className="py-24 text-center border-2 border-dashed border-slate-100 rounded-3xl">
-                  <Clock className="w-12 h-12 text-slate-200 mx-auto mb-6" />
-                  <p className="text-slate-400 font-bold text-lg">아직 구성된 일정이 없습니다.</p>
-                  <p className="text-slate-300 text-sm mt-2">상단 시간표에서 필요한 교시를 선택해 주세요.</p>
-                </div>
-              )}
+              {basket.length === 0 && <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-6 text-center"><Calendar className="mx-auto mb-2 h-5 w-5 text-slate-400" /><p className="text-xs font-bold leading-5 text-slate-600">요일을 선택하고 필요한 교시를 눌러주세요.</p></div>}
             </div>
-          </div>
+            {!hasStudentId && <div className="mb-3 rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-900"><p>학생 정보가 등록되어 있지 않아 신청할 수 없습니다.</p><button type="button" onClick={onOpenSettings} className="mt-2 font-black underline underline-offset-4">개인 설정에서 학번 입력하기</button></div>}
+            {errorMessage && <p role="alert" className="mb-3 rounded-xl bg-red-50 p-3 text-xs leading-5 text-red-700">{errorMessage}</p>}
+            <button type="button" disabled={basket.length === 0 || saving || !hasStudentId} onClick={() => setShowConfirmModal(true)} className="w-full rounded-xl bg-blue-700 px-4 py-3.5 text-sm font-black text-white shadow-sm transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500">{saving ? '제출 중...' : '신청 내용 확인'}</button>
+            <p className="mt-3 text-center text-[11px] leading-5 text-slate-500">선택한 모든 시간은 한 번의 신청으로 접수됩니다.</p>
+          </aside>
+        </div>
+      </section>
 
-          <div className="bg-white border border-slate-200 rounded-3xl p-10 shadow-xl">
-            <h3 className="text-2xl font-black text-slate-900 mb-10 flex items-center gap-3">
-              <Bell className="w-8 h-8 text-amber-500" />
-              나의 주간 신청 내역
-            </h3>
+      <section aria-label="나의 주간 신청 내역" className="mt-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+        <div className="mb-5 flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-800"><Bell className="h-5 w-5" /></div>
+          <div><h2 className="font-black text-slate-900">나의 주간 신청 내역</h2><p className="text-xs text-slate-500">이전에 접수한 시간표와 처리 상태를 확인할 수 있어요.</p></div>
+        </div>
 
-            {loading ? (
-              <div className="py-20 text-center text-slate-400 font-bold">신청 내역을 불러오는 중입니다...</div>
-            ) : errorMessage ? (
-              <div className="py-20 text-center text-red-600 font-bold">{errorMessage}</div>
-            ) : submissions.length === 0 ? (
-              <div className="py-20 text-center text-slate-400 font-bold">등록된 신청 내역이 없습니다.</div>
-            ) : (
-              <div className="space-y-4">
-                {submissions.map((sub) => (
-                  <motion.div
-                    layout
-                    key={sub.id}
-                    onClick={() => setViewDetail(viewDetail?.id === sub.id ? null : sub)}
-                    className={cn(
-                      'border border-slate-100 rounded-[28px] overflow-hidden transition-all cursor-pointer group',
-                      viewDetail?.id === sub.id ? 'ring-2 ring-blue-600 shadow-2xl scale-[1.02]' : 'hover:border-slate-300 hover:bg-slate-50',
-                    )}
-                  >
-                    <div className="p-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
-                      <div className="flex items-center gap-7">
-                        <div className={cn(
-                          'w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg',
-                          sub.status === 'approved' ? 'bg-emerald-500 text-white' : sub.status === 'rejected' || sub.status === 'cancelled' ? 'bg-red-500 text-white' : sub.status === 'returned' ? 'bg-slate-500 text-white' : 'bg-amber-500 text-white',
-                        )}>
-                          <Check className="w-8 h-8" />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-3 mb-1.5">
-                            <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">{sub.id} • {sub.appliedAt}</span>
-                            <span className={cn(
-                              'text-[10px] font-black px-2.5 py-1 rounded-full border shadow-sm',
-                              sub.status === 'approved' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : sub.status === 'rejected' || sub.status === 'cancelled' ? 'bg-red-50 text-red-600 border-red-100' : sub.status === 'returned' ? 'bg-slate-100 text-slate-600 border-slate-200' : 'bg-amber-50 text-amber-600 border-amber-100',
-                            )}
-                            >
-                              {sub.status === 'approved' ? '승인 완료' : sub.status === 'rejected' ? '신청 반려' : sub.status === 'cancelled' ? '신청 취소' : sub.status === 'returned' ? '반납 완료' : '승인 대기'}
-                            </span>
-                          </div>
-                          <h4 className="font-black text-xl text-slate-900">{sub.weekLabel} 대여 내역</h4>
-                          <p className="text-sm font-bold text-slate-500 mt-1">총 {sub.slots.length}개 슬롯 구성됨</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center text-slate-400 font-bold text-sm">
-                        {viewDetail?.id === sub.id ? '상세 닫기' : '상세 보기'}
-                        <ChevronDown className={cn('ml-2 w-5 h-5 transition-transform', viewDetail?.id === sub.id && 'rotate-180')} />
-                      </div>
+        {loading ? <div className="py-12 text-center text-sm font-medium text-slate-500" role="status">신청 내역을 불러오는 중입니다...</div>
+          : submissions.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-5 py-12 text-center"><Clock className="mx-auto mb-3 h-6 w-6 text-slate-400" /><p className="font-bold text-slate-700">등록된 신청 내역이 없습니다.</p></div>
+            : <div className="grid gap-3 lg:grid-cols-2">
+              {submissions.map((submission) => {
+                const expanded = viewDetail?.id === submission.id;
+                const statusLabel = submission.status === 'approved' ? '승인 완료' : submission.status === 'rejected' ? '반려' : submission.status === 'cancelled' ? '취소' : submission.status === 'returned' ? '반납 완료' : '승인 대기';
+                const statusClass = submission.status === 'approved' ? 'bg-emerald-50 text-emerald-800' : submission.status === 'rejected' || submission.status === 'cancelled' ? 'bg-red-50 text-red-700' : submission.status === 'returned' ? 'bg-slate-100 text-slate-600' : 'bg-amber-50 text-amber-800';
+                return <article key={submission.id} className="overflow-hidden rounded-2xl border border-slate-200">
+                  <button type="button" onClick={() => setViewDetail(expanded ? null : submission)} aria-expanded={expanded} className="flex w-full items-center justify-between gap-4 p-4 text-left transition hover:bg-slate-50">
+                    <span className="min-w-0"><span className="mb-1 flex flex-wrap items-center gap-2"><span className="font-black text-slate-900">{submission.weekLabel}</span><span className={cn('rounded-full px-2.5 py-1 text-[10px] font-black', statusClass)}>{statusLabel}</span></span><span className="block text-xs text-slate-500">{submission.appliedAt} 접수 · {submission.slots.length}개 교시</span>{!hasCalendarWeekLabel(submission.weekLabel) && <span className="mt-1 block text-[11px] text-slate-500">이전 신청은 정확한 날짜 없이 요일만 저장되어 있어요.</span>}</span>
+                    <ChevronDown className={cn('h-4 w-4 shrink-0 text-slate-500 transition', expanded && 'rotate-180')} />
+                  </button>
+                  <AnimatePresence>{expanded && <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden border-t border-slate-200 bg-[#fbfaf7]">
+                    <div className="space-y-2 p-4">
+                      {WEEKDAYS.map((day, dayIdx) => {
+                        const daySlots = submission.slots.filter((slot) => slot.dayIdx === dayIdx).sort((a, b) => a.periodIdx - b.periodIdx);
+                        if (!daySlots.length) return null;
+                        const dayDate = formatRequestSlot(daySlots[0], submission.startDate, submission.weekLabel).split(' · ')[0];
+                        return <div key={day.short} className="flex flex-col gap-2 sm:flex-row sm:items-start"><span className="w-32 shrink-0 pt-1 text-xs font-black text-slate-600">{dayDate}</span><div className="flex flex-wrap gap-1.5">{daySlots.map((slot) => <span key={slot.periodIdx} className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700">{PERIODS[slot.periodIdx].label} · {PERIODS[slot.periodIdx].time}</span>)}</div></div>;
+                      })}
                     </div>
-
-                    <AnimatePresence>
-                      {viewDetail?.id === sub.id && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          className="bg-slate-900 p-8 border-t border-slate-800"
-                        >
-                          <div className="grid grid-cols-6 gap-2">
-                            <div className="h-10" />
-                            {DAYS.map((d) => (
-                              <div key={d} className="text-center text-[10px] font-black text-slate-500 uppercase">{d}</div>
-                            ))}
-
-                            {PERIODS.map((period, pIdx) => (
-                              <div key={`row-${pIdx}`} className="contents">
-                                <div className="text-right pr-4 text-[10px] font-black text-slate-600 pt-2 flex items-center justify-end">{period.label}</div>
-                                {DAYS.map((_, dIdx) => {
-                                  const isActive = sub.slots.some((slot) => slot.dayIdx === dIdx && slot.periodIdx === pIdx);
-                                  return (
-                                    <div
-                                      key={`s-${dIdx}-${pIdx}`}
-                                      className={cn(
-                                        'h-10 rounded-lg transition-all',
-                                        isActive ? 'bg-blue-600 shadow-[0_0_15px_rgba(37,99,235,0.4)] ring-1 ring-white/10' : 'bg-slate-800/30',
-                                      )}
-                                    />
-                                  );
-                                })}
-                              </div>
-                            ))}
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </motion.div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="lg:col-span-1">
-          <div className="bg-slate-900 text-white p-12 rounded-[40px] shadow-2xl sticky top-10 border border-white/5 overflow-hidden">
-            <div className="relative z-10">
-              <div className="w-16 h-16 bg-blue-600 rounded-3xl flex items-center justify-center mb-10 shadow-2xl shadow-blue-500/40">
-                <Calendar className="w-8 h-8 text-white" />
-              </div>
-              <h3 className="text-3xl font-black mb-8 leading-tight italic">
-                통합 신청서<br />전송 준비 완료
-              </h3>
-              <p className="text-slate-400 text-base leading-relaxed mb-12 font-medium">
-                {selectedYear}년 {selectedMonth}월 {selectedWeek}주차에 사용할 노트북 세트 대여를 신청합니다. <br /><br />
-                설정하신 모든 교시를 하나의 통합된 일정으로 전송하여 관리자의 승인을 받습니다.
-              </p>
-              {errorMessage && (
-                <div className="mb-6 rounded-2xl bg-red-50 border border-red-200 text-red-700 px-4 py-3 text-sm">
-                  {errorMessage}
-                </div>
-              )}
-              {!hasStudentId && (
-                <div className="mb-6 rounded-2xl bg-amber-50 border border-amber-200 text-amber-700 px-4 py-3 text-sm">
-                  학생 정보가 등록되어 있지 않습니다. 먼저 설정에서 학번을 입력해주세요.
-                </div>
-              )}
-              <button
-                disabled={basket.length === 0 || saving || !hasStudentId}
-                onClick={() => setShowConfirmModal(true)}
-                className="w-full bg-blue-600 text-white py-6 rounded-2xl font-black text-lg hover:bg-blue-700 disabled:bg-slate-800 disabled:text-slate-600 transition-all shadow-[0_20px_40px_rgba(37,99,235,0.3)] active:scale-[0.98]"
-              >
-                {saving ? '제출 중...' : '최종 신청 제출하기'}
-              </button>
-            </div>
-            <div className="absolute -bottom-24 -right-24 w-64 h-64 bg-blue-600/10 rounded-full blur-[90px] pointer-events-none opacity-50" />
-          </div>
-        </div>
-      </div>
-
+                  </motion.div>}</AnimatePresence>
+                </article>;
+              })}
+            </div>}
+      </section>
       <AnimatePresence>
         {showConfirmModal && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-6" role="dialog" aria-modal="true" aria-labelledby="class-submit-title">
@@ -553,21 +441,29 @@ export default function ClassRentalView({ currentUser }: ClassRentalViewProps) {
               initial={{ scale: 0.9, opacity: 0, y: 30 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 30 }}
-              className="bg-white rounded-[40px] shadow-2xl w-full max-w-md relative z-10 p-16 text-center"
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-md relative z-10 p-8 sm:p-10 text-center"
             >
-              <div className="w-24 h-24 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-10 ring-[12px] ring-blue-50/50">
-                <Clock className="w-12 h-12" />
+              <div className="w-16 h-16 bg-blue-50 text-blue-700 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                <Clock className="w-8 h-8" />
               </div>
               <h3 id="class-submit-title" className="text-3xl font-black text-slate-900 mb-4">신청을 제출할까요?</h3>
-              <p className="text-slate-500 text-base mb-14 leading-relaxed font-bold">
-                {selectedMonth}월 {selectedWeek}주차 전체 일정이<br />하나의 통합 신청으로 저장됩니다.
+              <p className="text-slate-600 text-sm mb-4 leading-7 font-medium">
+                {selectedYear}년 {selectedMonth}월 {selectedWeek}주차 · {selectedWeekData?.dateLabel}<br />{basket.length}개 교시를 한 번에 신청하며, 승인 후 노트북이 배정됩니다.
               </p>
+              <div className="mb-6 max-h-48 space-y-2 overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left">
+                {WEEKDAYS.map((day, dayIdx) => {
+                  const daySlots = basket.filter((slot) => slot.dayIdx === dayIdx).sort((a, b) => a.periodIdx - b.periodIdx);
+                  if (daySlots.length === 0) return null;
+                  const date = selectedWeekData?.datesByDay[dayIdx];
+                  return <p key={day.short} className="text-xs leading-5 text-slate-700"><strong className="text-slate-900">{day.full}{date ? ` ${formatShortSchoolDate(date)}` : ''}</strong><span> · {daySlots.map((slot) => PERIODS[slot.periodIdx].label).join(', ')}</span></p>;
+                })}
+              </div>
 
-              <div className="grid grid-cols-2 gap-5">
+              <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
                   onClick={() => setShowConfirmModal(false)}
-                  className="py-5 text-sm font-black text-slate-400 hover:text-slate-700 transition-all"
+                  className="min-h-12 py-3 text-sm font-black text-slate-600 hover:text-slate-900 transition-all"
                 >
                   다시 검토하기
                 </button>
@@ -575,7 +471,7 @@ export default function ClassRentalView({ currentUser }: ClassRentalViewProps) {
                   type="button"
                   onClick={handleFinalSubmit}
                   disabled={saving}
-                  className="bg-slate-900 text-white py-5 rounded-2xl font-black text-sm hover:bg-black shadow-xl transition-all active:scale-95"
+                  className="bg-slate-900 text-white py-3 rounded-2xl font-black text-sm hover:bg-slate-800 shadow-sm transition-all active:scale-95"
                 >
                   {saving ? '제출 중...' : '네, 제출합니다'}
                 </button>

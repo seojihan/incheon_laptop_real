@@ -37,13 +37,13 @@ npx supabase db push
    - `http://127.0.0.1:3100`
    - `http://localhost:5500`
    - `http://127.0.0.1:5500`
-   - 실제 배포 주소
+   - 실제 배포 주소 (예: `https://<프로젝트명>.vercel.app`, Site URL도 이 주소로 변경)
 4. Google Cloud OAuth 클라이언트의 Authorized JavaScript origins에 로컬/배포 Origin을, Authorized redirect URIs에는 `https://qvjjscwswznknlyolqsa.supabase.co/auth/v1/callback`을 등록합니다.
 5. 학교 계정만 허용할 경우 Google Workspace 및 OAuth 동의 화면의 Audience 설정을 확인합니다.
 
 Google 공급자 활성화에는 프로젝트 소유자의 Google Cloud OAuth Client ID와 Client Secret이 반드시 필요합니다. 이 두 값은 소스 코드나 `.env`에 넣지 말고 Supabase Dashboard의 Google 공급자 설정에만 저장하십시오.
 
-일반 사용자는 최초 로그인 시 학생 역할로 생성됩니다. 교사·도우미·관리자 역할은 사용자 스스로 선택할 수 없으며, 인증 사용자가 한 번 로그인해 프로필을 만든 뒤 SQL Editor에서 관리자가 변경합니다.
+이 전시용 사이트에서는 로그인 화면에서 학생 또는 교사를 선택할 수 있습니다. 교사는 담당 학년·반을 입력해 바로 시작하며, 프로필의 역할과 담당 반은 Supabase에 저장되어 학급별 접근 범위에 사용됩니다. 전시용 정책이므로 실제 운영 서비스에 공개하기 전에는 교사 역할의 자체 선택을 제한하는 별도 승인 정책으로 바꾸어야 합니다. 이 흐름은 교사 권한 신청이나 관리자 승인 요청을 보내지 않습니다.
 
 ```sql
 update public.profiles

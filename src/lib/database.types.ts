@@ -57,7 +57,9 @@ export type Database = {
         Row: {
           class_num: string
           created_at: string
+          archived_at: string | null
           end_date: string | null
+          grade: string
           id: string
           notebook_number: number | null
           reason: string | null
@@ -80,7 +82,9 @@ export type Database = {
         Insert: {
           class_num: string
           created_at?: string
+          archived_at?: string | null
           end_date?: string | null
+          grade: string
           id?: string
           notebook_number?: number | null
           reason?: string | null
@@ -103,7 +107,9 @@ export type Database = {
         Update: {
           class_num?: string
           created_at?: string
+          archived_at?: string | null
           end_date?: string | null
+          grade?: string
           id?: string
           notebook_number?: number | null
           reason?: string | null
@@ -176,6 +182,7 @@ export type Database = {
       }
       notifications: {
         Row: {
+          archived_at: string | null
           created_at: string
           id: string
           message: string
@@ -185,6 +192,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          archived_at?: string | null
           created_at?: string
           id?: string
           message: string
@@ -194,6 +202,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          archived_at?: string | null
           created_at?: string
           id?: string
           message?: string
@@ -221,6 +230,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          archived_at: string | null
           class_num: string | null
           created_at: string
           grade: string | null
@@ -232,6 +242,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          archived_at?: string | null
           class_num?: string | null
           created_at?: string
           grade?: string | null
@@ -243,6 +254,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          archived_at?: string | null
           class_num?: string | null
           created_at?: string
           grade?: string | null
@@ -260,12 +272,24 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_notebook_inventory_summary: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          active_end_date: string | null
+          active_request_type: string | null
+          active_start_date: string | null
+          home_rental_count: number
+          notebook_number: number
+        }[]
+      }
       cancel_laptop_request: {
         Args: { p_request_id: string }
         Returns: {
+          archived_at: string | null
           class_num: string
           created_at: string
           end_date: string | null
+          grade: string
           id: string
           notebook_number: number | null
           reason: string | null
@@ -295,9 +319,11 @@ export type Database = {
       return_laptop_request: {
         Args: { p_request_id: string }
         Returns: {
+          archived_at: string | null
           class_num: string
           created_at: string
           end_date: string | null
+          grade: string
           id: string
           notebook_number: number | null
           reason: string | null
@@ -331,9 +357,11 @@ export type Database = {
           p_review_note?: string
         }
         Returns: {
+          archived_at: string | null
           class_num: string
           created_at: string
           end_date: string | null
+          grade: string
           id: string
           notebook_number: number | null
           reason: string | null

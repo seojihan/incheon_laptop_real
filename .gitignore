@@ -15,3 +15,10 @@ served_*
 !.vscode/tasks.json
 .idea/
 supabase/.temp/
+.vercel/
+
+# Presentation/video build artifacts (not part of the website)
+.ppt-build/
+output/
+__pycache__/
+*.pyc

@@ -6,9 +6,10 @@ import { AppNotification, User } from '../types';
 interface NotificationsViewProps {
   currentUser: User;
   onUnreadCountChange: (count: number) => void;
+  onOpenRequest: (requestId: string) => void;
 }
 
-export default function NotificationsView({ currentUser, onUnreadCountChange }: NotificationsViewProps) {
+export default function NotificationsView({ currentUser, onUnreadCountChange, onOpenRequest }: NotificationsViewProps) {
   const [items, setItems] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -74,16 +75,20 @@ export default function NotificationsView({ currentUser, onUnreadCountChange }: 
       ) : (
         <div className="space-y-3">
           {items.map((item) => (
-            <button key={item.id} type="button" onClick={() => void readOne(item)} className={`w-full text-left rounded-2xl border p-6 transition ${item.readAt ? 'bg-white border-slate-200' : 'bg-blue-50 border-blue-200 shadow-sm'}`}>
-              <div className="flex justify-between gap-5">
-                <div>
+            <article key={item.id} className={`rounded-2xl border p-5 sm:p-6 transition ${item.readAt ? 'bg-white border-slate-200' : 'bg-blue-50 border-blue-200 shadow-sm'}`}>
+              <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+                <div className="min-w-0">
                   <p className="font-black text-slate-900">{item.title}</p>
                   <p className="text-sm text-slate-600 mt-2 leading-6">{item.message}</p>
                   <p className="text-xs text-slate-400 mt-3">{new Date(item.createdAt).toLocaleString('ko-KR')}</p>
                 </div>
-                {!item.readAt && <span className="shrink-0 w-2.5 h-2.5 rounded-full bg-blue-600 mt-2" aria-label="읽지 않음" />}
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
+                  {!item.readAt && <span className="mr-1 inline-flex items-center gap-2 text-xs font-bold text-blue-800"><span className="h-2 w-2 rounded-full bg-blue-600" />읽지 않음</span>}
+                  {!item.readAt && <button type="button" onClick={() => void readOne(item)} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-black text-slate-700 hover:bg-slate-50">읽음 처리</button>}
+                  {item.requestId && <button type="button" onClick={() => { void readOne(item).finally(() => onOpenRequest(item.requestId!)); }} className="rounded-xl bg-blue-700 px-3 py-2.5 text-xs font-black text-white hover:bg-blue-800">신청 내역 보기</button>}
+                </div>
               </div>
-            </button>
+            </article>
           ))}
         </div>
       )}

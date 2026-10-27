@@ -1,4 +1,5 @@
 import { RentalSlot } from '../types';
+import { getClassRentalWeeks } from './rentalSchedule';
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -31,8 +32,9 @@ export const validateProfileFields = (params: {
     if (!/^(?:[1-9]|[1-4]\d|50)$/.test(studentNum)) return '번호는 1~50 사이의 숫자로 입력해주세요.';
   }
 
-  if (params.role === 'teacher' && !/^(?:[1-9]|1\d|20)$/.test(classNum)) {
-    return '담당 반은 1~20 사이의 숫자로 입력해주세요.';
+  if (params.role === 'teacher') {
+    if (!/^[1-3]$/.test(grade)) return '담당 학년은 1~3 사이의 숫자로 입력해주세요.';
+    if (!/^(?:[1-9]|1\d|20)$/.test(classNum)) return '담당 반은 1~20 사이의 숫자로 입력해주세요.';
   }
 
   return null;
@@ -103,7 +105,33 @@ export const validateSlots = (slots: RentalSlot[]) => {
   return null;
 };
 
-export const getCurrentWeekOfMonth = () => Math.min(5, Math.ceil(new Date().getDate() / 7));
+export const validateClassRentalSelection = (params: {
+  year: number;
+  month: number;
+  week: number;
+  weekStartDate: string;
+  slots: RentalSlot[];
+  todayIso?: string;
+}) => {
+  const todayIso = params.todayIso ?? todayLocalIso();
+  const slotError = validateSlots(params.slots);
+  if (slotError) return slotError;
+
+  const selectedWeek = getClassRentalWeeks(params.year, params.month, todayIso)
+    .find((week) => week.week === params.week);
+  if (!selectedWeek || selectedWeek.mondayDate !== params.weekStartDate) {
+    return '선택한 대여 주간을 확인할 수 없습니다. 날짜를 다시 선택해주세요.';
+  }
+  if (!selectedWeek.available) return '이미 지난 주간은 신청할 수 없습니다.';
+
+  for (const slot of params.slots) {
+    const date = selectedWeek.datesByDay[slot.dayIdx];
+    if (!date) return '선택한 요일이 대여 주간에 포함되지 않습니다.';
+    if (date < todayIso) return '이미 지난 날짜는 신청할 수 없습니다.';
+  }
+
+  return null;
+};
 
 export const getRequestErrorMessage = (error: unknown, fallback: string) => {
   const candidate = error as { code?: string; message?: string; details?: string } | null;

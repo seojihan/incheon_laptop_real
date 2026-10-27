@@ -4,14 +4,54 @@
 @theme {
   --font-sans: "Inter", "Noto Sans KR", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
-  
-  --color-slate-50: #FFFFFF;
-  --color-slate-100: #F9F9F9;
-  --color-slate-200: #EEEEEE;
-  --color-slate-500: #888888;
-  --color-slate-800: #111111;
-  --color-slate-900: #000000;
-  --color-brand-blue: #000000;
+
+  /* Warm paper neutrals shared by every page. */
+  --color-slate-50: #faf7f0;
+  --color-slate-100: #f3eee4;
+  --color-slate-200: #e6dfd2;
+  --color-slate-300: #d3cabb;
+  --color-slate-400: #9a907f;
+  --color-slate-500: #746b5d;
+  --color-slate-600: #5b5247;
+  --color-slate-700: #433b32;
+  --color-slate-800: #354337;
+  --color-slate-900: #293d31;
+  --color-slate-950: #1d2f24;
+  /* Replace the old saturated blue UI accent with the school's calm leaf green. */
+  --color-blue-50: #f1f6f0;
+  --color-blue-100: #e4eee2;
+  --color-blue-200: #cbdcc8;
+  --color-blue-300: #adc5aa;
+  --color-blue-400: #8daa8b;
+  --color-blue-500: #6e8f72;
+  --color-blue-600: #55765e;
+  --color-blue-700: #43624d;
+  --color-blue-800: #354e3e;
+  --color-blue-900: #293d31;
+  --color-blue-950: #1d2f24;
+  --color-indigo-50: var(--color-blue-50);
+  --color-indigo-100: var(--color-blue-100);
+  --color-indigo-200: var(--color-blue-200);
+  --color-indigo-300: var(--color-blue-300);
+  --color-indigo-400: var(--color-blue-400);
+  --color-indigo-500: var(--color-blue-500);
+  --color-indigo-600: var(--color-blue-600);
+  --color-indigo-700: var(--color-blue-700);
+  --color-indigo-800: var(--color-blue-800);
+  --color-indigo-900: var(--color-blue-900);
+  --color-indigo-950: var(--color-blue-950);
+  --color-cyan-50: var(--color-blue-50);
+  --color-cyan-100: var(--color-blue-100);
+  --color-cyan-200: var(--color-blue-200);
+  --color-cyan-300: var(--color-blue-300);
+  --color-cyan-400: var(--color-blue-400);
+  --color-cyan-500: var(--color-blue-500);
+  --color-cyan-600: var(--color-blue-600);
+  --color-cyan-700: var(--color-blue-700);
+  --color-cyan-800: var(--color-blue-800);
+  --color-cyan-900: var(--color-blue-900);
+  --color-cyan-950: var(--color-blue-950);
+  --color-brand-blue: #55765e;
 }
 
 @layer base {
@@ -24,7 +64,7 @@
   }
 
   body {
-    @apply bg-white text-black antialiased font-sans;
+    @apply bg-[#faf7f0] text-slate-900 antialiased font-sans;
     min-width: 320px;
     min-height: 100vh;
   }
@@ -35,6 +75,11 @@
   select,
   textarea {
     @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2;
+  }
+
+  ::selection {
+    background: #d9e6d5;
+    color: #211d17;
   }
 }
 
@@ -84,4 +129,5 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+
 }

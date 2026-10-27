@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" fill="none">
+  <defs>
+    <linearGradient id="table" x1="90" y1="582" x2="730" y2="710" gradientUnits="userSpaceOnUse"><stop stop-color="#C9A17D"/><stop offset="1" stop-color="#A97B59"/></linearGradient>
+    <linearGradient id="device" x1="192" y1="525" x2="630" y2="594" gradientUnits="userSpaceOnUse"><stop stop-color="#F1EFEB"/><stop offset="1" stop-color="#C8C7C1"/></linearGradient>
+    <filter id="shadow" x="70" y="529" width="660" height="198" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feGaussianBlur stdDeviation="19"/></filter>
+  </defs>
+  <path fill="#FAF7F0" d="M0 0h800v800H0z"/>
+  <circle cx="659" cy="165" r="128" fill="#EEE8DC"/>
+  <path d="M0 557c116-36 221-30 328 10 108 41 209 37 301 2 66-25 119-29 171-17v248H0V557Z" fill="#F0ECE3"/>
+  <rect x="86" y="129" width="172" height="282" rx="13" fill="#FFFEFC"/>
+  <rect x="101" y="144" width="142" height="252" rx="7" fill="#E7E7DC"/>
+  <path d="M172 145v250M102 266h140" stroke="#FFFEFC" stroke-width="9"/>
+  <path d="M110 365c26-47 46-47 68 0m-39 0c8-20 20-28 37-29" stroke="#829681" stroke-linecap="round" stroke-width="8"/>
+  <rect x="566" y="214" width="142" height="123" rx="17" fill="#FFFEFC"/>
+  <circle cx="594" cy="242" r="10" fill="#E9DDC5"/><path d="M614 240h70" stroke="#B0A793" stroke-linecap="round" stroke-width="5"/><path d="M586 266h98" stroke="#E8E3D9" stroke-linecap="round" stroke-width="6"/><path d="M586 287h73" stroke="#E8E3D9" stroke-linecap="round" stroke-width="6"/><rect x="586" y="304" width="67" height="18" rx="9" fill="#E8EFE5"/>
+  <ellipse cx="405" cy="620" rx="292" ry="43" fill="#4D3B30" fill-opacity=".17" filter="url(#shadow)"/>
+  <path d="M68 578h664v132H68z" fill="url(#table)"/><path d="M68 578h664v17H68z" fill="#D9B893"/>
+  <g transform="translate(-140 -140) scale(1.35)">
+  <rect x="224" y="277" width="365" height="273" rx="23" fill="#29333A"/>
+  <rect x="239" y="292" width="335" height="243" rx="12" fill="#FFFEFC"/>
+  <path d="M251 304h311v34H251z" fill="#F8F6F1"/><circle cx="270" cy="321" r="8" fill="#6F8873"/><path d="M287 320h78" stroke="#424540" stroke-linecap="round" stroke-width="5"/><path d="M515 320h25" stroke="#A8A49A" stroke-linecap="round" stroke-width="4"/>
+  <text x="267" y="367" fill="#42423D" font-family="Arial,sans-serif" font-size="12" font-weight="700">집에서도 이어지는 학습</text>
+  <text x="267" y="386" fill="#9D988E" font-family="Arial,sans-serif" font-size="8">나의 대여 기간</text>
+  <rect x="267" y="399" width="278" height="84" rx="10" fill="#F6F3EC"/>
+  <text x="282" y="420" fill="#8E887D" font-family="Arial,sans-serif" font-size="8">2026년 10월</text>
+  <g fill="#A69E90" font-family="Arial,sans-serif" font-size="8"><text x="284" y="440">월</text><text x="318" y="440">화</text><text x="352" y="440">수</text><text x="386" y="440">목</text><text x="420" y="440">금</text><text x="454" y="440">토</text><text x="488" y="440">일</text></g>
+  <g fill="#6C7669" font-family="Arial,sans-serif" font-size="8"><text x="285" y="464">19</text><text x="319" y="464">20</text><text x="353" y="464">21</text><text x="387" y="464">22</text><text x="421" y="464">23</text></g>
+  <rect x="344" y="448" width="25" height="24" rx="12" fill="#DDE7D9"/><text x="353" y="464" fill="#47644F" font-family="Arial,sans-serif" font-size="8" font-weight="700">21</text>
+  <rect x="267" y="493" width="278" height="27" rx="8" fill="#425D4B"/><text x="347" y="511" fill="#fff" font-family="Arial,sans-serif" font-size="9" font-weight="700">대여 정보 확인하기</text>
+  <path d="M190 552h432l49 36H143l47-36Z" fill="url(#device)"/><path d="M258 559h296l23 18H236l22-18Z" fill="#D5D2CB"/><path d="M372 563h72" stroke="#A8A7A1" stroke-linecap="round" stroke-width="4"/>
+  <rect x="119" y="488" width="66" height="80" rx="9" fill="#B8815E"/><path d="M114 489h76v11h-76z" fill="#D39B75"/><path d="M132 517h39m-39 12h30" stroke="#8E634D" stroke-linecap="round" stroke-width="4"/>
+  </g>
+  <rect x="650" y="475" width="56" height="93" rx="9" fill="#C49B72"/><path d="M644 476c2-16 15-29 31-29s29 13 31 29h-62Z" fill="#6E846B"/><path d="M674 457c-18-20-13-42 7-55 17 19 16 38-4 56m7 2c7-21 24-28 42-21-7 20-22 28-42 25" fill="#8DA187"/>
+</svg>

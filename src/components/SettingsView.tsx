@@ -66,12 +66,18 @@ export default function SettingsView({ currentUser, onProfileUpdated }: Settings
         role: currentUser.role,
         student_id: studentId,
         student_name: name.trim(),
-        grade: needsStudentInfo ? normalizeDigits(grade) : null,
+        grade: needsClass ? normalizeDigits(grade) : null,
         class_num: normalizedClass || null,
         metadata: { email: currentUser.email },
       });
 
-      onProfileUpdated({ ...currentUser, name: name.trim(), studentId: studentId || undefined, classNum: normalizedClass || undefined });
+      onProfileUpdated({
+        ...currentUser,
+        name: name.trim(),
+        studentId: studentId || undefined,
+        grade: needsClass ? normalizeDigits(grade) : undefined,
+        classNum: normalizedClass || undefined,
+      });
       setStatus('success');
     } catch (caught) {
       setErrorMessage(caught instanceof Error ? caught.message : '설정 저장 중 오류가 발생했습니다.');
@@ -107,7 +113,12 @@ export default function SettingsView({ currentUser, onProfileUpdated }: Settings
           </div>
         )}
 
-        {currentUser.role === 'teacher' && <NumberField label="담당 반" value={classNum} onChange={setClassNum} placeholder="3" />}
+        {currentUser.role === 'teacher' && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <NumberField label="담당 학년" value={grade} onChange={setGrade} placeholder="2" />
+            <NumberField label="담당 반" value={classNum} onChange={setClassNum} placeholder="3" />
+          </div>
+        )}
 
         {status === 'error' && errorMessage && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{errorMessage}</div>}
         {status === 'success' && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700">설정이 저장되었습니다.</div>}
@@ -119,9 +130,9 @@ export default function SettingsView({ currentUser, onProfileUpdated }: Settings
 }
 
 function TextField({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (value: string) => void; placeholder: string }) {
-  return <label className="grid gap-2 text-sm font-bold text-slate-700">{label}<input required maxLength={40} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" /></label>;
+  return <label className="grid min-w-0 gap-2 text-sm font-bold text-slate-700">{label}<input required maxLength={40} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="w-full min-w-0 rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" /></label>;
 }
 
 function NumberField({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (value: string) => void; placeholder: string }) {
-  return <label className="grid gap-2 text-sm font-bold text-slate-700">{label}<input required inputMode="numeric" pattern="[0-9]*" maxLength={2} value={value} onChange={(event) => onChange(normalizeDigits(event.target.value).slice(0, 2))} placeholder={placeholder} className="rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" /></label>;
+  return <label className="grid min-w-0 gap-2 text-sm font-bold text-slate-700">{label}<input required inputMode="numeric" pattern="[0-9]*" maxLength={2} value={value} onChange={(event) => onChange(normalizeDigits(event.target.value).slice(0, 2))} placeholder={placeholder} className="w-full min-w-0 rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" /></label>;
 }
