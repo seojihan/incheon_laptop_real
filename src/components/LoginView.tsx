@@ -39,7 +39,7 @@ export default function LoginView({ authError, onAuthError, onAuthSuccess, onOpe
         <div className="mx-auto flex h-[72px] max-w-7xl items-center justify-between px-5 sm:px-8">
           <div className="flex items-center gap-3">
             <SchoolLogo className="h-10 w-10" />
-            <span><span className="block text-sm font-black tracking-tight sm:text-base">인천중산고 노트북 포털</span><span className="mt-0.5 block text-[9px] font-extrabold tracking-[0.18em] text-slate-400">INCHEON JUNG SAN HIGH SCHOOL</span></span>
+            <span><span className="block text-sm font-black tracking-tight sm:text-base">인천중산고 노트북 포털</span><span className="mt-0.5 block text-[9px] font-extrabold tracking-[0.18em] text-slate-400">INCHEON JUNGSAN HIGH SCHOOL</span></span>
           </div>
           <button type="button" onClick={onOpenTerms} className="rounded-full px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-100 hover:text-blue-700">이용약관</button>
         </div>

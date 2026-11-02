@@ -96,7 +96,7 @@ export default function TopNav({ user, currentView, onLogout, onViewChange, unre
           <SchoolLogo className="h-11 w-11 shadow-lg shadow-blue-900/15 transition-transform group-hover:-rotate-3" />
           <span className="hidden min-[420px]:block">
             <span className="block text-sm font-black tracking-tight text-slate-900 sm:text-base">인천중산고 노트북 포털</span>
-            <span className="mt-0.5 block text-[9px] font-extrabold tracking-[0.18em] text-slate-400">INCHEON JUNG SAN HIGH SCHOOL</span>
+            <span className="mt-0.5 block text-[9px] font-extrabold tracking-[0.18em] text-slate-400">INCHEON JUNGSAN HIGH SCHOOL</span>
           </span>
         </button>
 
