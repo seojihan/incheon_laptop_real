@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Archive, LoaderCircle, ShieldCheck, UserRoundCog, UsersRound } from 'lucide-react';
+import { Archive, LoaderCircle, LogOut, ShieldCheck, UserRoundCog, UsersRound } from 'lucide-react';
 import { User } from '../types';
-import { archiveTeacherClass, ClassArchiveResult, getTeacherClassMembers, setNotebookHelper, ClassMember } from '../lib/roles';
+import { archiveTeacherClass, ClassArchiveResult, forceStudentSignOut, getTeacherClassMembers, setNotebookHelper, ClassMember } from '../lib/roles';
 
 export default function TeacherClassTools({ currentUser }: { currentUser: User }) {
   const [members, setMembers] = useState<ClassMember[]>([]);
@@ -10,6 +10,8 @@ export default function TeacherClassTools({ currentUser }: { currentUser: User }
   const [archiveBusy, setArchiveBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [archiveResult, setArchiveResult] = useState<ClassArchiveResult | null>(null);
+  const [signOutNotice, setSignOutNotice] = useState<string | null>(null);
+  const [signOutBusy, setSignOutBusy] = useState(false);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -30,6 +32,18 @@ export default function TeacherClassTools({ currentUser }: { currentUser: User }
     try { await setNotebookHelper(member.user_id, isHelper); await reload(); }
     catch (caught) { setError(caught instanceof Error ? caught.message : '학생 역할을 변경하지 못했습니다.'); }
     finally { setWorkingId(null); }
+  };
+
+  const handleSignOut = async (member: ClassMember) => {
+    if (!window.confirm(`${member.student_name} 학생을 로그아웃시킬까요?\n\n접속 중인 기기에서 로그인 화면으로 돌아갑니다. 계정이 정지되는 것은 아니며, 다시 로그인하면 바로 이용할 수 있습니다.`)) return;
+    setSignOutBusy(true);
+    setError(null);
+    setSignOutNotice(null);
+    try {
+      await forceStudentSignOut([member.user_id]);
+      setSignOutNotice(`${member.student_name} 학생을 로그아웃 처리했습니다. 다시 로그인하면 이용할 수 있습니다.`);
+    } catch (caught) { setError(caught instanceof Error ? caught.message : '로그아웃 처리하지 못했습니다.'); }
+    finally { setSignOutBusy(false); }
   };
 
   const handleArchive = async () => {
@@ -63,6 +77,7 @@ export default function TeacherClassTools({ currentUser }: { currentUser: User }
       </div>
 
       {error && <div role="alert" className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{error}</div>}
+      {signOutNotice && <div role="status" className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold leading-6 text-emerald-900">{signOutNotice}</div>}
       {archiveResult && <div role="status" className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm leading-6 text-emerald-900"><strong>학급 보관 완료.</strong> 학생 {archiveResult.profiles}명, 신청 기록 {archiveResult.requests}건, 알림 {archiveResult.notifications}건을 사이트에서 숨겼고 DB에 보존했습니다.</div>}
 
       {loading ? <div role="status" className="py-10 text-center text-sm font-bold text-slate-500">학생 목록을 불러오는 중입니다...</div> : members.length === 0 ? <div className="mt-5 rounded-2xl bg-slate-50 px-5 py-8 text-center text-sm text-slate-500">담당 반에 활성 학생 계정이 없습니다.</div> : (
@@ -72,9 +87,12 @@ export default function TeacherClassTools({ currentUser }: { currentUser: User }
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600"><UserRoundCog className="h-5 w-5" /></span>
               <div className="min-w-0"><p className="truncate text-sm font-black text-slate-900">{member.student_name}<span className="ml-2 font-mono text-xs text-slate-500">{member.student_id}</span></p><p className="mt-0.5 text-xs text-slate-500">{member.role === 'helper' ? '노트북 관리 도우미' : '학생'}</p></div>
             </div>
-            <button type="button" onClick={() => void handleRole(member)} disabled={workingId === member.user_id} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-xs font-black text-slate-700 hover:bg-slate-50 disabled:opacity-50">
-              {workingId === member.user_id ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}{member.role === 'helper' ? '도우미 해제' : '도우미 지정'}
-            </button>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <button type="button" onClick={() => void handleSignOut(member)} disabled={signOutBusy} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-xs font-black text-slate-700 transition hover:border-red-200 hover:text-red-600 disabled:opacity-50"><LogOut className="h-4 w-4" />로그아웃</button>
+              <button type="button" onClick={() => void handleRole(member)} disabled={workingId === member.user_id} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-xs font-black text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+                {workingId === member.user_id ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}{member.role === 'helper' ? '도우미 해제' : '도우미 지정'}
+              </button>
+            </div>
           </div>)}
         </div>
       )}

@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Bell, CheckCheck, RefreshCw } from 'lucide-react';
+import { Bell, CheckCheck, RefreshCw, UsersRound } from 'lucide-react';
 import { getNotifications, markAllNotificationsRead, markNotificationRead } from '../lib/db';
+import { readPageParams } from '../lib/pageLinks';
+import { cn } from '../lib/utils';
 import { AppNotification, User } from '../types';
+import StudentInfoPanel from './StudentInfoPanel';
 
 interface NotificationsViewProps {
   currentUser: User;
@@ -13,6 +16,10 @@ export default function NotificationsView({ currentUser, onUnreadCountChange, on
   const [items, setItems] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const canViewStudents = currentUser.role === 'teacher' || currentUser.role === 'admin';
+  const [pageParams] = useState(() => readPageParams(window.location.search));
+  const [tab, setTab] = useState<'notifications' | 'students'>(canViewStudents && pageParams.tab === 'students' ? 'students' : 'notifications');
+  const studentId = canViewStudents ? pageParams.student : undefined;
 
   const load = async () => {
     setLoading(true);
@@ -58,15 +65,23 @@ export default function NotificationsView({ currentUser, onUnreadCountChange, on
     <div className="max-w-4xl mx-auto pb-20">
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-5 mb-9">
         <div>
-          <h1 className="text-4xl font-black text-slate-900">알림</h1>
-          <p className="text-slate-500 mt-2">신청 승인·반려·반납 처리 결과를 확인합니다.</p>
+          <h1 className="text-4xl font-black text-slate-900">{tab === 'students' ? '학생 정보' : '알림'}</h1>
+          <p className="text-slate-500 mt-2">{tab === 'students' ? '학생별 대여 기록과 활동을 조회합니다.' : '신청 승인·반려·반납 처리 결과를 확인합니다.'}</p>
         </div>
-        <div className="flex gap-2">
+        {tab === 'notifications' && <div className="flex gap-2">
           <button type="button" onClick={() => void load()} disabled={loading} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold disabled:opacity-50"><RefreshCw className="w-4 h-4" />새로고침</button>
           <button type="button" onClick={() => void readAll()} disabled={!items.some((item) => !item.readAt)} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 text-white px-4 py-3 text-sm font-bold disabled:opacity-40"><CheckCheck className="w-4 h-4" />모두 읽음</button>
-        </div>
+        </div>}
       </div>
 
+      {canViewStudents && !studentId && (
+        <div role="tablist" aria-label="알림 화면 구분" className="mb-6 inline-flex rounded-2xl border border-slate-200 bg-white p-1">
+          <button type="button" role="tab" aria-selected={tab === 'notifications'} onClick={() => setTab('notifications')} className={cn('inline-flex min-h-11 items-center gap-2 rounded-xl px-5 text-sm font-black transition-colors', tab === 'notifications' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-50')}><Bell className="h-4 w-4" />알림</button>
+          <button type="button" role="tab" aria-selected={tab === 'students'} onClick={() => setTab('students')} className={cn('inline-flex min-h-11 items-center gap-2 rounded-xl px-5 text-sm font-black transition-colors', tab === 'students' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-50')}><UsersRound className="h-4 w-4" />학생 정보</button>
+        </div>
+      )}
+
+      {tab === 'students' ? <StudentInfoPanel studentId={studentId} /> : <>
       {error && <div role="alert" className="mb-5 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-bold text-red-700">{error}</div>}
       {loading ? (
         <div className="py-24 text-center text-slate-400">알림을 불러오는 중입니다...</div>
@@ -92,6 +107,7 @@ export default function NotificationsView({ currentUser, onUnreadCountChange, on
           ))}
         </div>
       )}
+      </>}
     </div>
   );
 }

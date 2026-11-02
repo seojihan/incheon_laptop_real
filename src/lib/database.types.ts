@@ -55,6 +55,7 @@ export type Database = {
       }
       laptop_requests: {
         Row: {
+          approval_signature_id?: string | null
           class_num: string
           created_at: string
           archived_at: string | null

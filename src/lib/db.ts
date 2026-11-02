@@ -1,11 +1,13 @@
 import {
   AppNotification,
+  ApprovalSignature,
   InternalHelpArticle,
   LaptopRequest,
   NotebookInventoryItem,
   RentalSlot,
   RequestType,
   RequestStatus,
+  ReviewResult,
   User,
 } from '../types';
 import { getRequestErrorMessage, normalizeClassNum, validateClassRentalSelection, validateHomeRental } from './validation';
@@ -36,6 +38,7 @@ interface LaptopRequestRow {
   notebook_number?: number | null;
   review_note?: string | null;
   reviewed_at?: string | null;
+  approval_signature_id?: string | null;
   created_at: string;
   updated_at?: string;
   archived_at?: string | null;
@@ -54,7 +57,9 @@ interface NotificationRow {
 const DEMO_REQUESTS_STORAGE_KEY = 'icjs-demo-laptop-requests';
 const DEMO_NOTIFICATIONS_STORAGE_KEY = 'icjs-demo-notifications';
 const DEMO_NOTEBOOKS_STORAGE_KEY = 'icjs-demo-notebook-inventory';
+const DEMO_SIGNATURES_STORAGE_KEY = 'icjs-demo-approval-signatures';
 const TOTAL_NOTEBOOKS = 33;
+export const REVIEW_NOTE_MAX_LENGTH = 500;
 const signalNotificationsChanged = () => window.dispatchEvent(new Event('icjs:notifications-changed'));
 const missingGradeColumn = (error: { code?: string; message?: string } | null) => Boolean(error && (
   error.code === '42703' || error.code === 'PGRST204'
@@ -109,6 +114,7 @@ const mapRowToRequest = (row: LaptopRequestRow): LaptopRequest => ({
   notebookNumber: row.notebook_number || undefined,
   reviewNote: row.review_note || undefined,
   reviewedAt: row.reviewed_at || undefined,
+  approvalSignatureId: row.approval_signature_id || undefined,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -346,6 +352,24 @@ export const getUserRequests = async (userId: string) => {
   return data.map(fromDatabaseRow).map(mapRowToRequest);
 };
 
+// Demo sessions have one local profile, so the student list comes from demo requests.
+export const getDemoStudents = () => {
+  const students = new Map<string, LaptopRequestRow>();
+  readDemoRequests().forEach((row) => { if (!students.has(row.user_id)) students.set(row.user_id, row); });
+  return Array.from(students.values())
+    .sort((a, b) => a.student_id.localeCompare(b.student_id))
+    .map((row) => ({
+      user_id: row.user_id,
+      role: 'student' as const,
+      student_id: row.student_id,
+      student_name: row.user_name,
+      grade: row.grade || row.student_id.slice(0, 1),
+      class_num: row.class_num,
+      last_sign_in_at: null,
+      session_reset_at: null,
+    }));
+};
+
 export const getRecords = async (user: User) => {
   if (isDemoSession()) {
     const all = readDemoRequests();
@@ -372,52 +396,90 @@ export const getRecords = async (user: User) => {
   return data.map(fromDatabaseRow).map(mapRowToRequest);
 };
 
-export const getPendingRequests = async (user: User) => {
-  if (!['admin', 'teacher', 'helper'].includes(user.role)) return [];
-  const all = await getRecords(user);
-  return all.filter((item) => item.status === 'pending');
-};
+const reviewDemoRequest = (requestId: string, decision: 'approved' | 'rejected', reviewNote: string, signatureId?: string) => {
+  const requests = readDemoRequests();
+  const index = requests.findIndex((item) => item.id === requestId && item.status === 'pending');
+  if (index < 0) throw new Error('이미 처리되었거나 존재하지 않는 신청입니다.');
 
-export const reviewLaptopRequest = async (requestId: string, decision: 'approved' | 'rejected', reviewNote = '') => {
-  if (isDemoSession()) {
-    const requests = readDemoRequests();
-    const index = requests.findIndex((item) => item.id === requestId && item.status === 'pending');
-    if (index < 0) throw new Error('이미 처리되었거나 존재하지 않는 신청입니다.');
-
-    if (decision === 'approved') {
-      const occupied = new Set(requests.filter((item) => item.status === 'approved' && item.notebook_number).map((item) => item.notebook_number));
-      const available = Array.from({ length: TOTAL_NOTEBOOKS }, (_, i) => i + 1).find((number) => !occupied.has(number));
-      if (!available) throw new Error('현재 대여 가능한 노트북이 없습니다. 반납 처리 후 다시 시도해주세요.');
-      requests[index].notebook_number = available;
-    }
-
-    requests[index] = {
-      ...requests[index],
-      status: decision,
-      review_note: reviewNote.trim() || null,
-      reviewed_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-    writeDemoRequests(requests);
-    addDemoNotification(
-      requests[index],
-      decision === 'approved' ? '대여 신청이 승인되었습니다' : '대여 신청이 반려되었습니다',
-      decision === 'approved'
-        ? `${requests[index].notebook_number}번 노트북이 배정되었습니다.`
-        : (reviewNote.trim() || '신청 내용을 확인한 뒤 다시 신청해주세요.'),
-    );
-    signalNotificationsChanged();
-    return mapRowToRequest(requests[index]);
+  if (decision === 'approved') {
+    const occupied = new Set(requests.filter((item) => item.status === 'approved' && item.notebook_number).map((item) => item.notebook_number));
+    const available = Array.from({ length: TOTAL_NOTEBOOKS }, (_, i) => i + 1).find((number) => !occupied.has(number));
+    if (!available) throw new Error('현재 대여 가능한 노트북이 없습니다.');
+    requests[index].notebook_number = available;
   }
 
-  const { data, error } = await supabase.rpc('review_laptop_request', {
-    p_request_id: requestId,
-    p_decision: decision,
-    p_review_note: reviewNote.trim() || null,
+  requests[index] = {
+    ...requests[index],
+    status: decision,
+    review_note: reviewNote.trim() || null,
+    reviewed_at: new Date().toISOString(),
+    approval_signature_id: decision === 'approved' ? signatureId ?? null : null,
+    updated_at: new Date().toISOString(),
+  };
+  writeDemoRequests(requests);
+  addDemoNotification(
+    requests[index],
+    decision === 'approved' ? '대여 신청이 승인되었습니다' : '대여 신청이 반려되었습니다',
+    decision === 'approved'
+      ? `${requests[index].notebook_number}번 노트북이 배정되었습니다.`
+      : reviewNote.trim(),
+  );
+};
+
+export const reviewLaptopRequests = async (params: {
+  requestIds: string[];
+  decision: 'approved' | 'rejected';
+  reviewNote?: string;
+  signature?: string;
+  signerName?: string;
+}): Promise<ReviewResult> => {
+  const reviewNote = params.reviewNote?.trim() ?? '';
+  if (params.decision === 'rejected' && !reviewNote) throw new Error('반려 사유를 입력해주세요.');
+  if (reviewNote.length > REVIEW_NOTE_MAX_LENGTH) throw new Error(`사유는 ${REVIEW_NOTE_MAX_LENGTH}자 이내로 입력해주세요.`);
+
+  if (isDemoSession()) {
+    let signatureId: string | undefined;
+    if (params.signature) {
+      signatureId = crypto.randomUUID();
+      const signatures = readStorage<Record<string, ApprovalSignature>>(DEMO_SIGNATURES_STORAGE_KEY, {});
+      signatures[signatureId] = { signerName: params.signerName || '데모 사용자', signatureData: params.signature, createdAt: new Date().toISOString() };
+      writeStorage(DEMO_SIGNATURES_STORAGE_KEY, signatures);
+    }
+    const result: ReviewResult = { processed: [], failed: [] };
+    params.requestIds.forEach((id) => {
+      try {
+        reviewDemoRequest(id, params.decision, reviewNote, signatureId);
+        result.processed.push(id);
+      } catch (caught) {
+        result.failed.push({ id, message: caught instanceof Error ? caught.message : '처리 중 오류가 발생했습니다.' });
+      }
+    });
+    signalNotificationsChanged();
+    return result;
+  }
+
+  const { data, error } = await (supabase as any).rpc('review_laptop_requests', {
+    p_request_ids: params.requestIds,
+    p_decision: params.decision,
+    p_review_note: reviewNote || null,
+    p_signature: params.signature ?? null,
   });
   if (error) throwFriendly(error, '신청 상태를 변경하지 못했습니다.');
   signalNotificationsChanged();
-  return mapRowToRequest(fromDatabaseRow(data));
+  return data as ReviewResult;
+};
+
+export const getApprovalSignature = async (signatureId: string): Promise<ApprovalSignature | null> => {
+  if (isDemoSession()) {
+    return readStorage<Record<string, ApprovalSignature>>(DEMO_SIGNATURES_STORAGE_KEY, {})[signatureId] ?? null;
+  }
+  const { data, error } = await (supabase as any)
+    .from('approval_signatures')
+    .select('signer_name, signature_data, created_at')
+    .eq('id', signatureId)
+    .maybeSingle();
+  if (error) throwFriendly(error, '승인 서명을 불러오지 못했습니다.');
+  return data ? { signerName: data.signer_name, signatureData: data.signature_data, createdAt: data.created_at } : null;
 };
 
 export const cancelLaptopRequest = async (requestId: string) => {

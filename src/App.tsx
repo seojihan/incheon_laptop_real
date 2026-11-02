@@ -5,9 +5,12 @@ import ConfigurationView from './components/ConfigurationView';
 import LoginView from './components/LoginView';
 import ProfileSetupView from './components/ProfileSetupView';
 import TopNav from './components/TopNav';
-import { getLoginIntent, getProfile, getSession, getUserRole, signOut as supabaseSignOut } from './lib/auth';
+import { getLoginIntent, getProfile, getSession, getUserRole, isDemoSession, signOut as supabaseSignOut } from './lib/auth';
 import { getNotifications } from './lib/db';
 import { isDemoModeEnabled, isSupabaseConfigured, supabase } from './lib/supabase';
+import { closePage, openNewPage, readPageParams } from './lib/pageLinks';
+import { getSessionResetAt } from './lib/roles';
+import { getSessionSignedInAt, isSessionInvalidated } from './lib/sessionReset';
 import { normalizeClassNum } from './lib/validation';
 import { User, UserRole, ViewType } from './types';
 
@@ -53,11 +56,13 @@ export default function App() {
   const [publicPage, setPublicPage] = useState<'login' | 'terms'>('login');
   const authSyncVersion = useRef(0);
   const signedOutRef = useRef(false);
+  const syncedUserIdRef = useRef<string | null>(null);
 
   const syncUserState = useCallback(async (session: Session | Record<string, any> | null) => {
     if (signedOutRef.current && session?.user) return;
     const syncVersion = ++authSyncVersion.current;
     if (!session?.user) {
+      syncedUserIdRef.current = null;
       setCurrentUser(null);
       setPendingUser(null);
       setUnreadCount(0);
@@ -103,10 +108,17 @@ export default function App() {
 
     setPendingUser(null);
     setCurrentUser(user);
-    setRequestedRecordId(null);
     setPublicPage('login');
-    setCurrentView(defaultView(user.role));
     setAuthError(null);
+    // Auth events repeat whenever a tab regains focus. Only the first one for a user
+    // picks the page, otherwise switching tabs would send this tab back to home.
+    if (syncedUserIdRef.current !== user.id) {
+      syncedUserIdRef.current = user.id;
+      const { view, request } = readPageParams(window.location.search);
+      const initialView = view && roleViews[user.role].includes(view) ? view : defaultView(user.role);
+      setCurrentView(initialView);
+      setRequestedRecordId(initialView === 'records' ? request ?? null : null);
+    }
 
     try {
       const notifications = await getNotifications(user.id);
@@ -122,7 +134,10 @@ export default function App() {
       const initializationVersion = authSyncVersion.current;
       try {
         const session = await getSession();
-        if (active && initializationVersion === authSyncVersion.current) await syncUserState(session);
+        if (active && initializationVersion === authSyncVersion.current) {
+          await syncUserState(session);
+          if (active) setIsAuthChecking(false);
+        }
       } catch (caught) {
         if (active && initializationVersion === authSyncVersion.current) {
           setCurrentUser(null);
@@ -137,6 +152,7 @@ export default function App() {
 
     const subscription = isSupabaseConfigured
       ? supabase.auth.onAuthStateChange((_event, session) => {
+          if (isDemoSession()) return;
           if (signedOutRef.current && session?.user) return;
           void syncUserState(session).catch((caught) => {
             if (active) setAuthError(caught instanceof Error ? caught.message : '로그인 상태를 갱신하지 못했습니다.');
@@ -169,18 +185,31 @@ export default function App() {
         .catch(() => undefined);
     };
     window.addEventListener('icjs:notifications-changed', refreshUnread);
-    return () => window.removeEventListener('icjs:notifications-changed', refreshUnread);
+    // Notifications may have been read in another tab.
+    window.addEventListener('focus', refreshUnread);
+    return () => {
+      window.removeEventListener('icjs:notifications-changed', refreshUnread);
+      window.removeEventListener('focus', refreshUnread);
+    };
   }, [currentUser]);
 
   const allowedViews = useMemo(() => currentUser ? roleViews[currentUser.role] : [], [currentUser]);
 
   const changeView = (view: ViewType) => {
-    if (!currentUser || !allowedViews.includes(view)) return;
-    setCurrentView(view);
+    if (!currentUser || !allowedViews.includes(view) || view === currentView) return;
+    if (view === 'home') {
+      setCurrentView('home');
+      window.history.replaceState(null, '', window.location.pathname);
+      return;
+    }
+    openNewPage({ view });
   };
+
+  const openRecords = (requestId?: string) => openNewPage({ view: 'records', request: requestId });
 
   const handleLogout = async () => {
     signedOutRef.current = true;
+    syncedUserIdRef.current = null;
     authSyncVersion.current += 1;
     setAuthError(null);
     setCurrentUser(null);
@@ -197,6 +226,33 @@ export default function App() {
       setAuthError(`${message} 브라우저의 로그인 상태는 정리했습니다.`);
     }
   };
+
+  // A teacher can send a student back to the login screen. This is not a block:
+  // the check passes again as soon as the student signs in.
+  const currentUserId = currentUser?.id;
+  const currentUserRole = currentUser?.role;
+  useEffect(() => {
+    if (!currentUserId || (currentUserRole !== 'student' && currentUserRole !== 'helper')) return;
+    let active = true;
+    const check = async () => {
+      if (document.visibilityState !== 'visible') return;
+      const resetAt = await getSessionResetAt(currentUserId);
+      if (!resetAt) return;
+      const session = await getSession().catch(() => null);
+      if (!active || !session) return;
+      if (!isSessionInvalidated(resetAt, getSessionSignedInAt(session.access_token, session.user?.last_sign_in_at))) return;
+      await handleLogout();
+      setAuthError('선생님이 로그아웃 처리했습니다. 다시 로그인하면 이용할 수 있습니다.');
+    };
+    void check();
+    const timer = window.setInterval(() => { void check(); }, 30_000);
+    window.addEventListener('focus', check);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      window.removeEventListener('focus', check);
+    };
+  }, [currentUserId, currentUserRole]);
 
   if (!isSupabaseConfigured && !isDemoModeEnabled) return <ConfigurationView />;
 
@@ -235,16 +291,16 @@ export default function App() {
   const renderView = () => {
     switch (currentView) {
       case 'home': return <HomeDashboard currentUser={currentUser} unreadCount={unreadCount} onNavigate={changeView} />;
-      case 'class-rental': return <ClassRentalView currentUser={currentUser} onOpenRecords={(requestId) => { if (requestId) setRequestedRecordId(requestId); changeView('records'); }} onOpenSettings={() => changeView('settings')} />;
-      case 'home-rental': return <HomeRentalView currentUser={currentUser} onOpenRecords={(requestId) => { if (requestId) setRequestedRecordId(requestId); changeView('records'); }} onOpenSettings={() => changeView('settings')} />;
+      case 'class-rental': return <ClassRentalView currentUser={currentUser} onOpenRecords={openRecords} onOpenSettings={() => changeView('settings')} />;
+      case 'home-rental': return <HomeRentalView currentUser={currentUser} onOpenRecords={openRecords} onOpenSettings={() => changeView('settings')} />;
       case 'records': return <RecordsView currentUser={currentUser} initialRequestId={requestedRecordId} onRequestTargetHandled={() => setRequestedRecordId(null)} />;
-      case 'notebook-inventory': return <NotebookInventoryView currentUser={currentUser} onOpenRecords={() => changeView('records')} />;
-      case 'admin-approval': return <AdminApprovalView currentUser={currentUser} />;
+      case 'notebook-inventory': return <NotebookInventoryView currentUser={currentUser} onOpenRecords={() => openRecords()} />;
+      case 'admin-approval': return <AdminApprovalView currentUser={currentUser} onNavigate={changeView} />;
       case 'settings': return <SettingsView currentUser={currentUser} onProfileUpdated={setCurrentUser} />;
-      case 'notifications': return <NotificationsView currentUser={currentUser} onUnreadCountChange={setUnreadCount} onOpenRequest={(requestId) => { setRequestedRecordId(requestId); changeView('records'); }} />;
+      case 'notifications': return <NotificationsView currentUser={currentUser} onUnreadCountChange={setUnreadCount} onOpenRequest={openRecords} />;
       case 'info': return <InfoView currentUser={currentUser} onOpenStudentGuide={() => changeView('guide')} onOpenTerms={() => changeView('terms')} />;
-      case 'guide': return <StudentGuideView onBack={() => changeView('info')} />;
-      case 'terms': return <TermsView onBack={() => changeView('info')} />;
+      case 'guide': return <StudentGuideView onBack={() => closePage({ view: 'info' })} />;
+      case 'terms': return <TermsView onBack={() => closePage({ view: 'info' })} />;
     }
   };
 

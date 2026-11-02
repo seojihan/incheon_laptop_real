@@ -51,8 +51,20 @@ export interface LaptopRequest {
   notebookNumber?: number;
   reviewNote?: string;
   reviewedAt?: string;
+  approvalSignatureId?: string;
   createdAt: string;
   updatedAt?: string;
+}
+
+export interface ApprovalSignature {
+  signerName: string;
+  signatureData: string;
+  createdAt: string;
+}
+
+export interface ReviewResult {
+  processed: string[];
+  failed: { id: string; message: string }[];
 }
 
 export interface NotebookInventoryItem {
