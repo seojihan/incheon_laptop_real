@@ -8,7 +8,7 @@ import TopNav from './components/TopNav';
 import { getLoginIntent, getProfile, getSession, getUserRole, isDemoSession, signOut as supabaseSignOut } from './lib/auth';
 import { getNotifications } from './lib/db';
 import { isDemoModeEnabled, isSupabaseConfigured, supabase } from './lib/supabase';
-import { closePage, openNewPage, readPageParams } from './lib/pageLinks';
+import { closePage, openNewPage, readPageParams, releaseTabName } from './lib/pageLinks';
 import { getSessionResetAt } from './lib/roles';
 import { getSessionSignedInAt, isSessionInvalidated } from './lib/sessionReset';
 import { normalizeClassNum } from './lib/validation';
@@ -200,6 +200,7 @@ export default function App() {
     if (view === 'home') {
       setCurrentView('home');
       window.history.replaceState(null, '', window.location.pathname);
+      releaseTabName();
       return;
     }
     openNewPage({ view });

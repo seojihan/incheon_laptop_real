@@ -4,6 +4,7 @@ import { getUserRequests } from '../lib/db';
 import { closePage, openNewPage } from '../lib/pageLinks';
 import { buildStudentActivity, formatRentalWhen } from '../lib/requestSummary';
 import { forceStudentSignOut, getManageableStudents, ManagedStudent } from '../lib/roles';
+import { useFocusRefresh } from '../lib/useFocusRefresh';
 import { cn } from '../lib/utils';
 import { LaptopRequest } from '../types';
 import { PageBackButton, RequestStatusBadge, RequestTypeBadge, requestTypeTheme } from './approval/RequestParts';
@@ -27,6 +28,10 @@ export default function StudentInfoPanel({ studentId }: { studentId?: string }) 
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  useFocusRefresh(() => {
+    getManageableStudents().then(setStudents).catch(() => {});
+  });
 
   const filtered = useMemo(() => {
     const query = search.trim().toLocaleLowerCase('ko-KR');
@@ -100,6 +105,10 @@ function StudentDetail({ student }: { student: ManagedStudent }) {
   }, [student.user_id]);
 
   useEffect(() => { void load(); }, [load]);
+
+  useFocusRefresh(() => {
+    getUserRequests(student.user_id).then(setRequests).catch(() => {});
+  });
 
   const activity = useMemo(() => buildStudentActivity(requests), [requests]);
 

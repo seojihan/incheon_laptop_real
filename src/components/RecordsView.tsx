@@ -4,6 +4,7 @@ import { cancelLaptopRequest, getRecords, returnLaptopRequest } from '../lib/db'
 import { cn } from '../lib/utils';
 import { LaptopRequest, RequestStatus, User } from '../types';
 import { formatRequestSlot, hasCalendarWeekLabel } from '../lib/rentalSchedule';
+import { useFocusRefresh } from '../lib/useFocusRefresh';
 
 interface RecordsViewProps {
   currentUser: User;
@@ -33,6 +34,10 @@ export default function RecordsView({ currentUser, initialRequestId, onRequestTa
   };
 
   useEffect(() => { void load(); }, [currentUser.id, currentUser.role, currentUser.classNum]);
+
+  useFocusRefresh(() => {
+    getRecords(currentUser).then(setRecords).catch(() => {});
+  });
 
   useEffect(() => {
     if (loading || !initialRequestId) return;

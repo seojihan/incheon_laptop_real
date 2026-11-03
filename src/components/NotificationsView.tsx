@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Bell, CheckCheck, RefreshCw, UsersRound } from 'lucide-react';
 import { getNotifications, markAllNotificationsRead, markNotificationRead } from '../lib/db';
 import { readPageParams } from '../lib/pageLinks';
+import { useFocusRefresh } from '../lib/useFocusRefresh';
 import { cn } from '../lib/utils';
 import { AppNotification, User } from '../types';
 import StudentInfoPanel from './StudentInfoPanel';
@@ -36,6 +37,13 @@ export default function NotificationsView({ currentUser, onUnreadCountChange, on
   };
 
   useEffect(() => { void load(); }, [currentUser.id]);
+
+  useFocusRefresh(() => {
+    getNotifications(currentUser.id).then((data) => {
+      setItems(data);
+      onUnreadCountChange(data.filter((item) => !item.readAt).length);
+    }).catch(() => {});
+  });
 
   const readOne = async (item: AppNotification) => {
     if (item.readAt) return;

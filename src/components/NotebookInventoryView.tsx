@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 're
 import { AlertTriangle, BookOpen, Check, CircleOff, Home, Laptop, RefreshCw, Search, Save, Wrench, X } from 'lucide-react';
 import { getNotebookInventory, updateNotebookCondition } from '../lib/db';
 import { cn } from '../lib/utils';
+import { useFocusRefresh } from '../lib/useFocusRefresh';
 import { NotebookInventoryItem, User } from '../types';
 
 type InventoryFilter = 'all' | 'available' | 'home' | 'class' | 'unavailable' | 'maintenance' | 'retired';
@@ -38,6 +39,13 @@ export default function NotebookInventoryView({ currentUser, onOpenRecords }: No
   }, []);
 
   useEffect(() => { void load(); }, [currentUser.id, load]);
+
+  useFocusRefresh(() => {
+    getNotebookInventory().then((data) => {
+      setNotebooks(data);
+      setRefreshedAt(new Date());
+    }).catch(() => {});
+  });
 
   useEffect(() => {
     const dialog = detailDialogRef.current;
