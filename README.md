@@ -1,4 +1,4 @@
-# Incheon School Laptop Management System
+# Incheon junsan high School Laptop Management System
 
 학교 노트북 대여 신청, 승인 및 기록 관리를 위한 React 기반 웹 애플리케이션입니다.
 
