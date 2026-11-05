@@ -18,6 +18,8 @@ export default function StudentInfoPanel({ studentId }: { studentId?: string }) 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [signOutBusy, setSignOutBusy] = useState(false);
+  const [signOutNotice, setSignOutNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -38,6 +40,21 @@ export default function StudentInfoPanel({ studentId }: { studentId?: string }) 
     if (!query) return students;
     return students.filter((student) => [student.student_name, student.student_id].some((value) => value.toLocaleLowerCase('ko-KR').includes(query)));
   }, [students, search]);
+
+  const handleSignOutAll = async () => {
+    if (!window.confirm(`목록에 보이는 학생 ${filtered.length}명을 모두 로그아웃시킬까요?\n\n접속 중인 기기에서 로그인 화면으로 돌아갑니다. 계정이 정지되는 것은 아니며, 다시 로그인하면 바로 이용할 수 있습니다.`)) return;
+    setSignOutBusy(true);
+    setError(null);
+    setSignOutNotice(null);
+    try {
+      const result = await forceStudentSignOut(filtered.map((student) => student.user_id));
+      setSignOutNotice(`학생 ${result.signed_out}명을 로그아웃 처리했습니다. 접속 중인 화면은 10초 안에 로그인 화면으로 돌아갑니다.`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : '로그아웃 처리하지 못했습니다.');
+    } finally {
+      setSignOutBusy(false);
+    }
+  };
 
   const errorBanner = error && <div role="alert" className="mb-5 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-bold text-red-700">{error}</div>;
 
@@ -64,8 +81,10 @@ export default function StudentInfoPanel({ studentId }: { studentId?: string }) 
           <input value={search} onChange={(event) => setSearch(event.target.value)} type="search" placeholder="이름, 학번 검색" className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-11 pr-4 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
         </label>
         <button type="button" onClick={() => void load()} disabled={loading} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold disabled:opacity-50"><RefreshCw className="h-4 w-4" />새로고침</button>
+        <button type="button" onClick={() => void handleSignOutAll()} disabled={loading || signOutBusy || filtered.length === 0} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:border-red-200 hover:text-red-600 disabled:opacity-50">{signOutBusy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}{search.trim() ? `검색된 ${filtered.length}명 로그아웃` : `전체 ${filtered.length}명 로그아웃`}</button>
       </div>
 
+      {signOutNotice && <div role="status" className="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-bold text-emerald-900">{signOutNotice}</div>}
       {errorBanner}
 
       {loading ? (
@@ -119,7 +138,7 @@ function StudentDetail({ student }: { student: ManagedStudent }) {
     setNotice(null);
     try {
       await forceStudentSignOut([student.user_id]);
-      setNotice(`${student.student_name} 학생을 로그아웃 처리했습니다. 다시 로그인하면 이용할 수 있습니다.`);
+      setNotice(`${student.student_name} 학생을 로그아웃 처리했습니다. 접속 중인 화면은 10초 안에 로그인 화면으로 돌아갑니다.`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '로그아웃 처리하지 못했습니다.');
     } finally {

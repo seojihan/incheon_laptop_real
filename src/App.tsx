@@ -44,6 +44,8 @@ const roleViews: Record<UserRole, ViewType[]> = {
 
 const defaultView = (_role: UserRole): ViewType => 'home';
 
+const SESSION_RESET_CHECK_MS = 10_000;
+
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [pendingUser, setPendingUser] = useState<PendingUser | null>(null);
@@ -235,23 +237,31 @@ export default function App() {
   useEffect(() => {
     if (!currentUserId || (currentUserRole !== 'student' && currentUserRole !== 'helper')) return;
     let active = true;
+    let checking = false;
     const check = async () => {
-      if (document.visibilityState !== 'visible') return;
-      const resetAt = await getSessionResetAt(currentUserId);
-      if (!resetAt) return;
-      const session = await getSession().catch(() => null);
-      if (!active || !session) return;
-      if (!isSessionInvalidated(resetAt, getSessionSignedInAt(session.access_token, session.user?.last_sign_in_at))) return;
-      await handleLogout();
-      setAuthError('선생님이 로그아웃 처리했습니다. 다시 로그인하면 이용할 수 있습니다.');
+      if (checking || document.visibilityState !== 'visible') return;
+      checking = true;
+      try {
+        const resetAt = await getSessionResetAt(currentUserId);
+        if (!resetAt) return;
+        const session = await getSession().catch(() => null);
+        if (!active || !session) return;
+        if (!isSessionInvalidated(resetAt, getSessionSignedInAt(session.access_token, session.user?.last_sign_in_at))) return;
+        await handleLogout();
+        setAuthError('선생님이 로그아웃 처리했습니다. 다시 로그인하면 이용할 수 있습니다.');
+      } finally {
+        checking = false;
+      }
     };
     void check();
-    const timer = window.setInterval(() => { void check(); }, 30_000);
-    window.addEventListener('focus', check);
+    const timer = window.setInterval(() => { void check(); }, SESSION_RESET_CHECK_MS);
+    // Phones often skip `focus` when returning to the browser, so listen for all of these.
+    const events: [EventTarget, string][] = [[window, 'focus'], [document, 'visibilitychange'], [window, 'pageshow'], [window, 'online']];
+    events.forEach(([target, name]) => target.addEventListener(name, check));
     return () => {
       active = false;
       window.clearInterval(timer);
-      window.removeEventListener('focus', check);
+      events.forEach(([target, name]) => target.removeEventListener(name, check));
     };
   }, [currentUserId, currentUserRole]);
 

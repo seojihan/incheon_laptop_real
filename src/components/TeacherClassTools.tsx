@@ -34,14 +34,15 @@ export default function TeacherClassTools({ currentUser }: { currentUser: User }
     finally { setWorkingId(null); }
   };
 
-  const handleSignOut = async (member: ClassMember) => {
-    if (!window.confirm(`${member.student_name} 학생을 로그아웃시킬까요?\n\n접속 중인 기기에서 로그인 화면으로 돌아갑니다. 계정이 정지되는 것은 아니며, 다시 로그인하면 바로 이용할 수 있습니다.`)) return;
+  const handleSignOut = async (targets: ClassMember[]) => {
+    const label = targets.length === 1 ? `${targets[0].student_name} 학생을` : `반 학생 ${targets.length}명을 모두`;
+    if (!window.confirm(`${label} 로그아웃시킬까요?\n\n접속 중인 기기에서 로그인 화면으로 돌아갑니다. 계정이 정지되는 것은 아니며, 다시 로그인하면 바로 이용할 수 있습니다.`)) return;
     setSignOutBusy(true);
     setError(null);
     setSignOutNotice(null);
     try {
-      await forceStudentSignOut([member.user_id]);
-      setSignOutNotice(`${member.student_name} 학생을 로그아웃 처리했습니다. 다시 로그인하면 이용할 수 있습니다.`);
+      const result = await forceStudentSignOut(targets.map((member) => member.user_id));
+      setSignOutNotice(`학생 ${result.signed_out}명을 로그아웃 처리했습니다. 접속 중인 화면은 10초 안에 로그인 화면으로 돌아갑니다.`);
     } catch (caught) { setError(caught instanceof Error ? caught.message : '로그아웃 처리하지 못했습니다.'); }
     finally { setSignOutBusy(false); }
   };
@@ -73,7 +74,9 @@ export default function TeacherClassTools({ currentUser }: { currentUser: User }
           <h2 className="mt-3 text-2xl font-black text-slate-950">{currentUser.grade}학년 {Number(currentUser.classNum)}반</h2>
           <p className="mt-1 text-sm leading-6 text-slate-500">담임 반 학생만 관리할 수 있습니다. 도우미에게는 노트북 대여 승인과 장비 확인 권한이 부여됩니다.</p>
         </div>
-        <div className="flex items-center gap-2 text-xs font-bold text-slate-500"><UsersRound className="h-4 w-4" />활성 학생 {members.length}명</div>
+        <div className="flex items-center gap-2 text-xs font-bold text-slate-500"><UsersRound className="h-4 w-4" />활성 학생 {members.length}명
+          <button type="button" onClick={() => void handleSignOut(members)} disabled={signOutBusy || members.length === 0} className="ml-2 inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-xs font-black text-slate-700 transition hover:border-red-200 hover:text-red-600 disabled:opacity-50"><LogOut className="h-4 w-4" />전체 로그아웃</button>
+        </div>
       </div>
 
       {error && <div role="alert" className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{error}</div>}
@@ -88,7 +91,7 @@ export default function TeacherClassTools({ currentUser }: { currentUser: User }
               <div className="min-w-0"><p className="truncate text-sm font-black text-slate-900">{member.student_name}<span className="ml-2 font-mono text-xs text-slate-500">{member.student_id}</span></p><p className="mt-0.5 text-xs text-slate-500">{member.role === 'helper' ? '노트북 관리 도우미' : '학생'}</p></div>
             </div>
             <div className="flex shrink-0 flex-wrap gap-2">
-              <button type="button" onClick={() => void handleSignOut(member)} disabled={signOutBusy} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-xs font-black text-slate-700 transition hover:border-red-200 hover:text-red-600 disabled:opacity-50"><LogOut className="h-4 w-4" />로그아웃</button>
+              <button type="button" onClick={() => void handleSignOut([member])} disabled={signOutBusy} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-xs font-black text-slate-700 transition hover:border-red-200 hover:text-red-600 disabled:opacity-50"><LogOut className="h-4 w-4" />로그아웃</button>
               <button type="button" onClick={() => void handleRole(member)} disabled={workingId === member.user_id} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-xs font-black text-slate-700 hover:bg-slate-50 disabled:opacity-50">
                 {workingId === member.user_id ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}{member.role === 'helper' ? '도우미 해제' : '도우미 지정'}
               </button>
