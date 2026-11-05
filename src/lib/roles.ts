@@ -1,5 +1,5 @@
 import { isDemoSession } from './auth';
-import { getDemoStudents } from './db';
+import { getDemoStudents, markDemoStudentsSignedOut } from './db';
 import { supabase } from './supabase';
 
 const throwIfRoleSchemaMissing = (error: { code?: string; message?: string } | null) => {
@@ -20,13 +20,6 @@ export interface ClassMember {
   grade: string;
   class_num: string;
 }
-
-export const getTeacherClassMembers = async () => {
-  if (isDemoSession()) return getDemoStudents() as ClassMember[];
-  const { data, error } = await (supabase as any).rpc('list_teacher_class_members');
-  throwIfRoleSchemaMissing(error);
-  return (data ?? []) as ClassMember[];
-};
 
 export const setNotebookHelper = async (userId: string, isHelper: boolean) => {
   if (isDemoSession()) throw new Error('데모 모드에서는 도우미를 지정할 수 없습니다.');
@@ -69,7 +62,10 @@ export const getManageableStudents = async (): Promise<ManagedStudent[]> => {
 const SIGN_OUT_BATCH_SIZE = 200;
 
 export const forceStudentSignOut = async (userIds: string[]) => {
-  if (isDemoSession()) return { signed_out: userIds.length };
+  if (isDemoSession()) {
+    markDemoStudentsSignedOut(userIds);
+    return { signed_out: userIds.length };
+  }
   let signedOut = 0;
   for (let start = 0; start < userIds.length; start += SIGN_OUT_BATCH_SIZE) {
     const { data, error } = await (supabase as any).rpc('force_student_sign_out', { p_user_ids: userIds.slice(start, start + SIGN_OUT_BATCH_SIZE) });
