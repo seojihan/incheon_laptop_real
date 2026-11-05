@@ -27,7 +27,8 @@ export default function TeacherClassTools({ currentUser }: { currentUser: User }
   useEffect(() => { void reload(); }, [reload]);
 
   const refreshQuietly = () => getManageableStudents().then(setMembers).catch(() => {});
-  useFocusRefresh(() => { void refreshQuietly(); });
+  // Visitors keep signing in while the teacher watches this list.
+  useFocusRefresh(() => { void refreshQuietly(); }, 10_000);
 
   const isSignedOut = (member: ManagedStudent) => isSignedOutByTeacher(member.session_reset_at, member.last_sign_in_at);
   const stillSignedIn = members.filter((member) => !isSignedOut(member));
@@ -55,6 +56,21 @@ export default function TeacherClassTools({ currentUser }: { currentUser: User }
       await refreshQuietly();
     } catch (caught) { setError(caught instanceof Error ? caught.message : '로그아웃 처리하지 못했습니다.'); }
     finally { setSignOutBusy(false); }
+  };
+
+  // Uses a fresh list, so someone who signed in a moment ago is not missed.
+  const handleSignOutEveryone = async () => {
+    setError(null);
+    setSignOutNotice(null);
+    try {
+      const latest = await getManageableStudents();
+      setMembers(latest);
+      const targets = latest.filter((member) => !isSignedOut(member));
+      if (targets.length === 0) setSignOutNotice('로그아웃할 학생이 없습니다.');
+      else await handleSignOut(targets);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : '학생 목록을 불러오지 못했습니다.');
+    }
   };
 
   const handleArchive = async () => {
@@ -85,7 +101,7 @@ export default function TeacherClassTools({ currentUser }: { currentUser: User }
           <p className="mt-1 text-sm leading-6 text-slate-500">담임 반 학생만 관리할 수 있습니다. 도우미에게는 노트북 대여 승인과 장비 확인 권한이 부여됩니다.</p>
         </div>
         <div className="flex items-center gap-2 text-xs font-bold text-slate-500"><UsersRound className="h-4 w-4" />활성 학생 {members.length}명{members.length > stillSignedIn.length && ` · 로그아웃됨 ${members.length - stillSignedIn.length}명`}
-          <button type="button" onClick={() => void handleSignOut(stillSignedIn)} disabled={signOutBusy || stillSignedIn.length === 0} className="ml-2 inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-xs font-black text-slate-700 transition hover:border-red-200 hover:text-red-600 disabled:opacity-50"><LogOut className="h-4 w-4" />전체 로그아웃</button>
+          <button type="button" onClick={() => void handleSignOutEveryone()} disabled={signOutBusy || stillSignedIn.length === 0} className="ml-2 inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-xs font-black text-slate-700 transition hover:border-red-200 hover:text-red-600 disabled:opacity-50"><LogOut className="h-4 w-4" />전체 로그아웃</button>
         </div>
       </div>
 

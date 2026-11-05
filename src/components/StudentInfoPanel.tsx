@@ -34,24 +34,40 @@ export default function StudentInfoPanel({ studentId }: { studentId?: string }) 
   useEffect(() => { void load(); }, [load]);
 
   const refreshQuietly = () => getManageableStudents().then(setStudents).catch(() => {});
-  useFocusRefresh(() => { void refreshQuietly(); });
+  useFocusRefresh(() => { void refreshQuietly(); }, 10_000);
 
-  const filtered = useMemo(() => {
+  const matchSearch = (list: ManagedStudent[]) => {
     const query = search.trim().toLocaleLowerCase('ko-KR');
-    if (!query) return students;
-    return students.filter((student) => [student.student_name, student.student_id].some((value) => value.toLocaleLowerCase('ko-KR').includes(query)));
-  }, [students, search]);
+    if (!query) return list;
+    return list.filter((student) => [student.student_name, student.student_id].some((value) => value.toLocaleLowerCase('ko-KR').includes(query)));
+  };
+  const filtered = matchSearch(students);
 
   // Students who are already signed out are left alone.
-  const signOutTargets = filtered.filter((student) => !isSignedOutByTeacher(student.session_reset_at, student.last_sign_in_at));
+  const findTargets = (list: ManagedStudent[]) => matchSearch(list).filter((student) => !isSignedOutByTeacher(student.session_reset_at, student.last_sign_in_at));
+  const signOutTargets = findTargets(students);
 
+  // Uses a fresh list, so someone who signed in a moment ago is not missed.
   const handleSignOutAll = async () => {
-    if (!window.confirm(`목록에 보이는 학생 ${signOutTargets.length}명을 모두 로그아웃시킬까요?\n\n접속 중인 기기에서 로그인 화면으로 돌아갑니다. 계정이 정지되는 것은 아니며, 다시 로그인하면 바로 이용할 수 있습니다.`)) return;
-    setSignOutBusy(true);
     setError(null);
     setSignOutNotice(null);
+    let targets: ManagedStudent[];
     try {
-      const result = await forceStudentSignOut(signOutTargets.map((student) => student.user_id));
+      const latest = await getManageableStudents();
+      setStudents(latest);
+      targets = findTargets(latest);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : '학생 목록을 불러오지 못했습니다.');
+      return;
+    }
+    if (targets.length === 0) {
+      setSignOutNotice('로그아웃할 학생이 없습니다.');
+      return;
+    }
+    if (!window.confirm(`목록에 보이는 학생 ${targets.length}명을 모두 로그아웃시킬까요?\n\n접속 중인 기기에서 로그인 화면으로 돌아갑니다. 계정이 정지되는 것은 아니며, 다시 로그인하면 바로 이용할 수 있습니다.`)) return;
+    setSignOutBusy(true);
+    try {
+      const result = await forceStudentSignOut(targets.map((student) => student.user_id));
       setSignOutNotice(`학생 ${result.signed_out}명을 로그아웃 처리했습니다. 접속 중인 화면은 10초 안에 로그인 화면으로 돌아갑니다.`);
       await refreshQuietly();
     } catch (caught) {
