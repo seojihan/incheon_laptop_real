@@ -353,17 +353,15 @@ export const getUserRequests = async (userId: string) => {
 };
 
 // Demo sessions have one local profile, so the student list comes from demo requests.
-const DEMO_SIGN_OUTS_KEY = 'icjs-demo-sign-outs';
-const readDemoSignOuts = (): Record<string, string> => JSON.parse(window.localStorage.getItem(DEMO_SIGN_OUTS_KEY) || '{}');
-
+// Returns how many rentals were closed. The demo roster comes from these rows, so
+// removing them also removes the student from the list, as the server does.
 export const markDemoStudentsSignedOut = (userIds: string[]) => {
-  const signOuts = readDemoSignOuts();
-  userIds.forEach((id) => { signOuts[id] = new Date().toISOString(); });
-  window.localStorage.setItem(DEMO_SIGN_OUTS_KEY, JSON.stringify(signOuts));
+  const requests = readDemoRequests();
+  writeDemoRequests(requests.filter((row) => !userIds.includes(row.user_id)));
+  return requests.filter((row) => userIds.includes(row.user_id) && row.status === 'approved').length;
 };
 
 export const getDemoStudents = () => {
-  const signOuts = readDemoSignOuts();
   const students = new Map<string, LaptopRequestRow>();
   readDemoRequests().forEach((row) => { if (!students.has(row.user_id)) students.set(row.user_id, row); });
   return Array.from(students.values())
@@ -376,7 +374,7 @@ export const getDemoStudents = () => {
       grade: row.grade || row.student_id.slice(0, 1),
       class_num: row.class_num,
       last_sign_in_at: null,
-      session_reset_at: signOuts[row.user_id] ?? null,
+      session_reset_at: null,
     }));
 };
 

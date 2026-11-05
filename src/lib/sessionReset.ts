@@ -20,12 +20,6 @@ export const getSessionSignedInAt = (accessToken?: string, lastSignInAt?: string
   return Number.isNaN(fallback) ? null : fallback;
 };
 
-// For the teacher's list: signed out, and has not logged in since.
-export const isSignedOutByTeacher = (resetAt: string | null, lastSignInAt: string | null) => {
-  if (!resetAt) return false;
-  return !lastSignInAt || Date.parse(resetAt) > Date.parse(lastSignInAt);
-};
-
 // True only when a reset is known to be newer than this session. Missing data means
 // "keep the session", so a student who signs in again can never be stuck in a loop.
 export const isSessionInvalidated = (resetAt: string | null | undefined, signedInAt: number | null) => {

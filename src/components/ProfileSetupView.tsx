@@ -74,7 +74,9 @@ export default function ProfileSetupView({ pendingUser, assignedRole, onProfileS
       const code = typeof caught === 'object' && caught !== null && 'code' in caught
         ? String((caught as { code?: unknown }).code || '')
         : '';
-      if (assignedRole === 'teacher' && code === '42501') {
+      if (code === '23505') {
+        setError('이미 사용 중인 번호입니다. 다른 번호를 입력해주세요.');
+      } else if (assignedRole === 'teacher' && code === '42501') {
         setError('교사 정보가 데이터베이스 보호 규칙에 맞지 않아 저장되지 않았습니다. 이름, 담당 학년과 반을 확인한 뒤 다시 시도해주세요. 문제가 계속되면 관리자에게 알려주세요.');
       } else {
         setError(caught instanceof Error ? caught.message : '프로필 저장 중 오류가 발생했습니다.');
@@ -119,7 +121,7 @@ export default function ProfileSetupView({ pendingUser, assignedRole, onProfileS
           </div>
         )}
 
-        {pendingUser.isArchived && assignedRole === 'student' && <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm leading-6 text-amber-900"><p className="font-black">이전 학기 계정이 보관되어 있습니다.</p><p className="mt-1">새 학년 정보를 입력하면 학생 계정만 다시 활성화됩니다. 이전 대여 기록은 계속 보관됩니다.</p></div>}
+        {pendingUser.isArchived && assignedRole === 'student' && <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm leading-6 text-amber-900"><p className="font-black">이전 정보가 초기화되었습니다.</p><p className="mt-1">이름과 학년, 반, 번호를 다시 입력하면 바로 이용할 수 있습니다. 이미 다른 사람이 쓰는 번호는 사용할 수 없습니다.</p></div>}
 
         <div className="grid gap-5">
           <label className="grid min-w-0 gap-2 text-sm font-bold text-slate-700">

@@ -2,9 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Archive, LoaderCircle, LogOut, ShieldCheck, UserRoundCog, UsersRound } from 'lucide-react';
 import { User } from '../types';
 import { archiveTeacherClass, ClassArchiveResult, forceStudentSignOut, getManageableStudents, ManagedStudent, setNotebookHelper } from '../lib/roles';
-import { isSignedOutByTeacher } from '../lib/sessionReset';
 import { useFocusRefresh } from '../lib/useFocusRefresh';
-import StudentSessionStatus from './StudentSessionStatus';
 
 export default function TeacherClassTools({ currentUser }: { currentUser: User }) {
   const [members, setMembers] = useState<ManagedStudent[]>([]);
@@ -30,9 +28,6 @@ export default function TeacherClassTools({ currentUser }: { currentUser: User }
   // Visitors keep signing in while the teacher watches this list.
   useFocusRefresh(() => { void refreshQuietly(); }, 10_000);
 
-  const isSignedOut = (member: ManagedStudent) => isSignedOutByTeacher(member.session_reset_at, member.last_sign_in_at);
-  const stillSignedIn = members.filter((member) => !isSignedOut(member));
-
   const handleRole = async (member: ManagedStudent) => {
     const isHelper = member.role !== 'helper';
     const action = isHelper ? '노트북 관리 도우미로 지정' : '관리 도우미 권한 해제';
@@ -46,13 +41,13 @@ export default function TeacherClassTools({ currentUser }: { currentUser: User }
 
   const handleSignOut = async (targets: ManagedStudent[]) => {
     const label = targets.length === 1 ? `${targets[0].student_name} 학생을` : `반 학생 ${targets.length}명을 모두`;
-    if (!window.confirm(`${label} 로그아웃시킬까요?\n\n접속 중인 기기에서 로그인 화면으로 돌아갑니다. 계정이 정지되는 것은 아니며, 다시 로그인하면 바로 이용할 수 있습니다.`)) return;
+    if (!window.confirm(`${label} 로그아웃시킬까요?\n\n접속 중인 기기에서 로그인 화면으로 돌아가고, 쓰던 반 번호와 도우미 권한이 비워집니다. 대기 중이거나 대여 중인 신청도 모두 정리되어 노트북이 대여 가능 상태로 돌아갑니다. 다시 로그인하면 정보를 처음부터 입력합니다.`)) return;
     setSignOutBusy(true);
     setError(null);
     setSignOutNotice(null);
     try {
       const result = await forceStudentSignOut(targets.map((member) => member.user_id));
-      setSignOutNotice(`학생 ${result.signed_out}명을 로그아웃 처리했습니다. 접속 중인 화면은 10초 안에 로그인 화면으로 돌아갑니다.`);
+      setSignOutNotice(`학생 ${result.signed_out}명을 로그아웃 처리했습니다. 반 번호와 권한을 비웠고, 노트북 ${result.returned}대를 반납 처리했습니다.`);
       await refreshQuietly();
     } catch (caught) { setError(caught instanceof Error ? caught.message : '로그아웃 처리하지 못했습니다.'); }
     finally { setSignOutBusy(false); }
@@ -65,9 +60,8 @@ export default function TeacherClassTools({ currentUser }: { currentUser: User }
     try {
       const latest = await getManageableStudents();
       setMembers(latest);
-      const targets = latest.filter((member) => !isSignedOut(member));
-      if (targets.length === 0) setSignOutNotice('로그아웃할 학생이 없습니다.');
-      else await handleSignOut(targets);
+      if (latest.length === 0) setSignOutNotice('로그아웃할 학생이 없습니다.');
+      else await handleSignOut(latest);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '학생 목록을 불러오지 못했습니다.');
     }
@@ -100,8 +94,8 @@ export default function TeacherClassTools({ currentUser }: { currentUser: User }
           <h2 className="mt-3 text-2xl font-black text-slate-950">{currentUser.grade}학년 {Number(currentUser.classNum)}반</h2>
           <p className="mt-1 text-sm leading-6 text-slate-500">담임 반 학생만 관리할 수 있습니다. 도우미에게는 노트북 대여 승인과 장비 확인 권한이 부여됩니다.</p>
         </div>
-        <div className="flex items-center gap-2 text-xs font-bold text-slate-500"><UsersRound className="h-4 w-4" />활성 학생 {members.length}명{members.length > stillSignedIn.length && ` · 로그아웃됨 ${members.length - stillSignedIn.length}명`}
-          <button type="button" onClick={() => void handleSignOutEveryone()} disabled={signOutBusy || stillSignedIn.length === 0} className="ml-2 inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-xs font-black text-slate-700 transition hover:border-red-200 hover:text-red-600 disabled:opacity-50"><LogOut className="h-4 w-4" />전체 로그아웃</button>
+        <div className="flex items-center gap-2 text-xs font-bold text-slate-500"><UsersRound className="h-4 w-4" />활성 학생 {members.length}명
+          <button type="button" onClick={() => void handleSignOutEveryone()} disabled={signOutBusy || members.length === 0} className="ml-2 inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-xs font-black text-slate-700 transition hover:border-red-200 hover:text-red-600 disabled:opacity-50"><LogOut className="h-4 w-4" />전체 로그아웃</button>
         </div>
       </div>
 
@@ -114,10 +108,10 @@ export default function TeacherClassTools({ currentUser }: { currentUser: User }
           {members.map((member) => <div key={member.user_id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 items-center gap-3">
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600"><UserRoundCog className="h-5 w-5" /></span>
-              <div className="min-w-0"><p className="truncate text-sm font-black text-slate-900">{member.student_name}<span className="ml-2 font-mono text-xs text-slate-500">{member.student_id}</span></p><p className="mt-0.5 text-xs text-slate-500">{member.role === 'helper' ? '노트북 관리 도우미' : '학생'}</p><StudentSessionStatus student={member} /></div>
+              <div className="min-w-0"><p className="truncate text-sm font-black text-slate-900">{member.student_name}<span className="ml-2 font-mono text-xs text-slate-500">{member.student_id}</span></p><p className="mt-0.5 text-xs text-slate-500">{member.role === 'helper' ? '노트북 관리 도우미' : '학생'}</p></div>
             </div>
             <div className="flex shrink-0 flex-wrap gap-2">
-              <button type="button" onClick={() => void handleSignOut([member])} disabled={signOutBusy || isSignedOut(member)} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-xs font-black text-slate-700 transition hover:border-red-200 hover:text-red-600 disabled:opacity-50"><LogOut className="h-4 w-4" />{isSignedOut(member) ? '로그아웃됨' : '로그아웃'}</button>
+              <button type="button" onClick={() => void handleSignOut([member])} disabled={signOutBusy} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-xs font-black text-slate-700 transition hover:border-red-200 hover:text-red-600 disabled:opacity-50"><LogOut className="h-4 w-4" />로그아웃</button>
               <button type="button" onClick={() => void handleRole(member)} disabled={workingId === member.user_id} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-xs font-black text-slate-700 hover:bg-slate-50 disabled:opacity-50">
                 {workingId === member.user_id ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}{member.role === 'helper' ? '도우미 해제' : '도우미 지정'}
               </button>

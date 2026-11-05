@@ -88,7 +88,7 @@ export default function App() {
       setPendingUser({
         id: session.user.id,
         email,
-        name: profile?.student_name || fallbackName,
+        name: (profile?.archived_at ? '' : profile?.student_name) || fallbackName,
         assignedRole: profile?.archived_at && loginIntent === 'student' ? 'student' : (loginIntent === 'teacher' ? 'teacher' : (studentIntentOverridesTeacherRole ? 'student' : assignedRole)),
         isArchived: Boolean(profile?.archived_at),
         switchingFromTeacher,
@@ -248,7 +248,7 @@ export default function App() {
         if (!active || !session) return;
         if (!isSessionInvalidated(resetAt, getSessionSignedInAt(session.access_token, session.user?.last_sign_in_at))) return;
         await handleLogout();
-        setAuthError('선생님이 로그아웃 처리했습니다. 다시 로그인하면 이용할 수 있습니다.');
+        setAuthError('선생님이 로그아웃 처리했습니다. 다시 로그인한 뒤 정보를 입력하면 이용할 수 있습니다.');
       } finally {
         checking = false;
       }

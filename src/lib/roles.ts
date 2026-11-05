@@ -63,16 +63,18 @@ const SIGN_OUT_BATCH_SIZE = 200;
 
 export const forceStudentSignOut = async (userIds: string[]) => {
   if (isDemoSession()) {
-    markDemoStudentsSignedOut(userIds);
-    return { signed_out: userIds.length };
+    return { signed_out: userIds.length, returned: markDemoStudentsSignedOut(userIds) };
   }
   let signedOut = 0;
+  let returned = 0;
   for (let start = 0; start < userIds.length; start += SIGN_OUT_BATCH_SIZE) {
     const { data, error } = await (supabase as any).rpc('force_student_sign_out', { p_user_ids: userIds.slice(start, start + SIGN_OUT_BATCH_SIZE) });
     throwIfRoleSchemaMissing(error);
-    signedOut += (data as { signed_out: number }).signed_out;
+    const result = data as { signed_out: number; returned: number };
+    signedOut += result.signed_out;
+    returned += result.returned;
   }
-  return { signed_out: signedOut };
+  return { signed_out: signedOut, returned };
 };
 
 // Returns null when the value cannot be read: a failed check must never sign anyone out.
